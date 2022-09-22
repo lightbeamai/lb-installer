@@ -98,8 +98,12 @@ function serviceStatusCheck() {
       done
 }
 
+
+
 sudo systemctl enable --now cri-o
 sudo systemctl start cri-o
+
+
 
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -111,8 +115,33 @@ repo_gpgcheck=1
 gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
 
+
+
 yum install -y kubelet-1.21.0-0.x86_64 kubeadm-1.21.0-0.x86_64 kubectl-1.21.0-0.x86_64
+
+
+
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
+
 serviceStatusCheck "kubelet.service" "False"
+
+
+echo "kubelet Service is $(systemctl is-active kubelet)"
+echo "kubeadm reset"
+sudo yes | kubeadm reset
+
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+
+mkdir -p /root/.kube
+sudo yes | cp -i /etc/kubernetes/admin.conf /root/.kube/config
+sudo chown $(id -u):$(id -g) /root/.kube/config
+
+kubectl taint nodes --all node-role.kubernetes.io/master-
+kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
+
+echo "3. Setup helm"
+sudo curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && sudo tar -xvf helm-v3.3.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.3.4-linux-amd64.tar.gz
+helm version
 
