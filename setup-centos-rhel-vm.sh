@@ -112,7 +112,6 @@ gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cl
 EOF
 
 yum install -y kubelet-1.21.0-0.x86_64 kubeadm-1.21.0-0.x86_64 kubectl-1.21.0-0.x86_64
-
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"
