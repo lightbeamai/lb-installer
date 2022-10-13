@@ -22,4 +22,4 @@ bash setup-ubuntu-vm-gpu.sh
 - Run `kubeadm reset`
 - Run `rm ~/.kube/config`
 - Reboot the system
-- Follow the above steps to install again.
+- Follow the above steps to install the cluster again.
