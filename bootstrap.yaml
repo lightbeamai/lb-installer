@@ -1,0 +1,98 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: post-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+  labels:
+    app.kubernetes.io/component: lightbeam-bootstrap
+    app.kubernetes.io/instance: lightbeam
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: lightbeam
+    app.kubernetes.io/version: latest
+    helm.sh/chart: lightbeam-latest
+    name: lightbeam-bootstrap
+  name: lightbeam-bootstrap
+  namespace: lightbeam
+spec:
+  activeDeadlineSeconds: 2400
+  backoffLimit: 5
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      labels:
+        job-name: lightbeam-bootstrap
+    spec:
+      containers:
+      - env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: LOG_LEVEL
+          value: INFO
+        - name: LIGHTBEAM_BOOTSTRAP
+          value: "True"
+        envFrom:
+        - secretRef:
+            name: lightbeam-mongodb
+        - configMapRef:
+            name: lightbeam-common-configmap
+        image: docker.io/fastcomply/lightbeam-bootstrap:v1.1.9.1
+        imagePullPolicy: Always
+        name: lightbeam-bootstrap
+        resources:
+          limits:
+            cpu: 300m
+            memory: 400Mi
+          requests:
+            cpu: "0"
+            memory: "0"
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: docregistry-secret
+      initContainers:
+      - command:
+        - /bin/sh
+        - -c
+        - |
+          until nc -zv $MONGODB_SERVICE $MONGODB_PORT -w1; do echo 'Waiting for MongoDB cluster..'; sleep 2; done
+          until nc -zv $ELASTICSEARCH_ENDPOINT $ELASTICSEARCH_PORT -w1; do echo 'Waiting for Elasticsearch cluster..'; sleep 2; done
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        envFrom:
+        - secretRef:
+            name: lightbeam-mongodb
+        - configMapRef:
+            name: lightbeam-common-configmap
+        image: docker.io/library/busybox:1.31
+        imagePullPolicy: Always
+        name: wait-for-mongodb-elasticsearch-cluster
+        resources:
+          limits:
+            cpu: 300m
+            memory: 400Mi
+          requests:
+            cpu: "0"
+            memory: "0"
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      serviceAccount: lightbeam-stack
+      serviceAccountName: lightbeam-stack
+      terminationGracePeriodSeconds: 30
