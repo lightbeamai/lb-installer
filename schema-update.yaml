@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: schema-update
+  name: schema-update
+spec:
+  containers:
+  - image: docker.io/fastcomply/lb-schema-update:sot-update
+    imagePullPolicy: Always
+    name: schema-update
+    command:
+      - sleep
+      - "360000"
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+  imagePullSecrets:
+  - name: docregistry-secret
