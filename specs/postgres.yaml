@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: lb-postgres-data
+  namespace: postgres
+spec:
+  storageClassName: default # Change storage class as per k8s cluster.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lb-postgres
+  namespace: postgres
+  labels:
+    app: lb-postgres
+spec:
+  selector:
+    matchLabels:
+      app: lb-postgres
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: lb-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:9.5
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_USER
+          value: pgbench
+        - name: POSTGRES_PASSWORD
+          value: superpostgres
+        - name: PGBENCH_PASSWORD
+          value: superpostgres
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgredb
+      volumes:
+      - name: postgredb
+        persistentVolumeClaim:
+          claimName: lb-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: lb-postgres
+  name: lb-postgres
+  namespace: postgres
+spec:
+  ports:
+  - name: postgres
+    port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    app: lb-postgres
+  type: LoadBalancer
