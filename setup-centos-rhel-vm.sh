@@ -1,7 +1,39 @@
 #!/usr/bin/env bash
 
-echo "Installing podman podman-docker iproute-tc"
-sudo yum install -y iproute-tc podman podman-docker vim
+while getopts d:p: flag
+do
+    case "${flag}" in
+        d) install_docker=${OPTARG};;
+        p) docker_diskpath=${OPTARG};;
+    esac
+done
+: ${install_docker:="false"}
+: ${docker_diskpath:="/var/lib/docker"}
+echo "install_docker: $install_docker";
+echo "docker_diskpath: $docker_diskpath";
+
+if [ $install_docker = "true" ]; then
+        echo 'Installing docker..'
+        sudo dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+        sudo dnf install --nobest -y docker-ce
+        sudo systemctl enable --now docker
+        systemctl is-active docker
+        systemctl is-enabled docker
+  if [ $docker_diskpath != "/var/lib/docker" ]; then
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "data-root": "$docker_diskpath"
+}
+EOF
+systemctl daemon-reload && systemctl restart docker
+  fi
+
+else
+  echo "Installing podman podman-docker iproute-tc"
+  sudo yum install -y iproute-tc podman podman-docker vim
+
+fi
+
 
 # Create the .conf file to load the modules at bootup
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
@@ -118,14 +150,25 @@ serviceStatusCheck "kubelet.service" "False"
 echo "kubelet Service is $(systemctl is-active kubelet)"
 echo "kubeadm reset"
 sudo yes | kubeadm reset
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+
+if [ $install_docker = "true" ]; then
+  sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket /var/run/dockershim.sock
+else
+  sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+fi
+
 mkdir -p /root/.kube
 sudo yes | cp -i /etc/kubernetes/admin.conf /root/.kube/config
 sudo chown $(id -u):$(id -g) /root/.kube/config
 
 kubectl taint nodes --all node-role.kubernetes.io/master-
-kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
-kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
+
+if [ $install_docker = "true" ]; then
+  kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
+else
+  kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+  kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
+fi
 
 echo "3. Setup helm"
 sudo curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && sudo tar -xvf helm-v3.3.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.3.4-linux-amd64.tar.gz
