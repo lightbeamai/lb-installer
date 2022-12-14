@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: airbyte-servicenow
+  namespace: kube-system
+  labels:
+    k8s-app: airbyte-servicenow
+spec:
+  selector:
+    matchLabels:
+      name: airbyte-servicenow
+  template:
+    metadata:
+      labels:
+        name: airbyte-servicenow
+    spec:
+      containers:
+      - name: airbyte-servicenow
+        image: farosai/airbyte-servicenow-source:0.4.25
+        command:
+          - sleep
+          - "360000"
+      terminationGracePeriodSeconds: 30
