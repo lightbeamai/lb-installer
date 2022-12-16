@@ -55,7 +55,12 @@ sudo sysctl --system
 setenforce 0
 sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
 echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
-swapoff -a
+
+# Disable Swap Permanently.
+swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
+sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
+systemctl mask swap.target               # Completely disabled.
+
 sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
