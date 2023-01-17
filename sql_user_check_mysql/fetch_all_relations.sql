@@ -25,4 +25,5 @@ FROM (SELECT DISTINCT concat_ws('_', pk_constraint_name, fk_constraint_name) AS 
                                            unique_constraint_name AS pk_constraint_name
                                     FROM information_schema.referential_constraints) AS rc
                                    ON kcu.constraint_name = pk_constraint_name) AS rc1
-                    ON kcu1.constraint_name = rc1.fk_constraint_name) TBL;
+                    ON kcu1.constraint_name = rc1.fk_constraint_name) TBL
+WHERE l_schema_name = '__db_name__'; # <--- Update here
