@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lb-postgres
+  labels:
+    app: lb-postgres
+spec:
+  selector:
+    matchLabels:
+      app: lb-postgres
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: lb-postgres
+    spec:
+      containers:
+      - name: lb-postgres
+        image: postgres:11-bullseye
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - containerPort: 5432
+          name: lb-postgres
+        env:
+        - name: POSTGRES_USER
+          value: pgbench
+        - name: POSTGRES_PASSWORD
+          value: superpostgres
+        - name: PGBENCH_PASSWORD
+          value: superpostgres
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 5432
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgredb
+      volumes:
+      - name: postgredb
+        persistentVolumeClaim:
+          claimName: lb-postgres-data
+
