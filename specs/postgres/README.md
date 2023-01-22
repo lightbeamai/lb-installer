@@ -11,3 +11,6 @@ bash setup-postgres.sh <STORAGE_CLASS TO USE> \
  '<LOCAL_OR_S3_PATH>' \
  <DATABASE TO CREATE AND DUMP DATA> <PG_PASSWORD>
 ```
+
+For S3 files the path format is `s3://<bucket>/<path>` and for local files it's POSIX style path.
+We only support importing from `.gz` compressed files. These files must contain only one SQL file.
