@@ -8,9 +8,23 @@ STORAGE_SIZE=$2
 NAMESPACE=$3
 DATABASE_DUMP_FILE_PATH=$4
 DATABASE_NAME=$5
+POSTGRES_PASSWORD=$6
 SQL_CREATE_DB_STMT="CREATE DATABASE $DATABASE_NAME;"
 
 mkdir -p overlays
+
+cat <<'EOF' > overlays/pg_secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lb-postgres-secret
+  namespace: NAMESPACE
+  labels:
+    app: lb-postgres
+type: Opaque
+data:
+  POSTGRES_PASSWORD: "PG_PASSWORD"
+EOF
 cat <<'EOF' > overlays/pv-patch.yaml
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -31,13 +45,18 @@ commonLabels:
 namespace: NAMESPACE
 resources:
   - ../base
+  - pg_secret.yaml
 patchesStrategicMerge:
   - pv-patch.yaml
+  - pg_secret.yaml
 EOF
 
 sed -i "s/STORAGE_CLASS_NAME/$STORAGE_CLASS_NAME/g" overlays/pv-patch.yaml
 sed -i "s/STORAGE_SIZE/$STORAGE_SIZE/g" overlays/pv-patch.yaml
 sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/kustomization.yaml
+sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/pg_secret.yaml
+pgPassword=$(echo "$POSTGRES_PASSWORD" | base64)
+sed -i "s/PG_PASSWORD/$pgPassword/g" overlays/pg_secret.yaml
 kubectl create ns "$NAMESPACE" || true
 kubectl kustomize overlays/ | kubectl apply -f -
 rm -rf overlays
@@ -52,5 +71,5 @@ gzip -d dump.sql.gz
 pgPod=$(kubectl get pods -l app=lb-postgres -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$pgPod":/tmp/
 filesList=$(kubectl exec deploy/lb-postgres -- ls /tmp/)
-kubectl exec deploy/lb-postgres -- psql --username pgbench -c "$SQL_CREATE_DB_STMT"
-kubectl exec deploy/lb-postgres -- psql --username pgbench -d "$DATABASE_NAME" -f /tmp/"$filesList"
+kubectl exec deploy/lb-postgres -- psql --username postgres -c "$SQL_CREATE_DB_STMT"
+kubectl exec deploy/lb-postgres -- psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
