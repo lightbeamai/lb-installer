@@ -43,7 +43,11 @@ kubectl kustomize overlays/ | kubectl apply -f -
 rm -rf overlays
 kubectl wait --for=condition=ready pod -l app=lb-postgres  -n "$NAMESPACE" --timeout 300s
 pushd "$WORK_DIR"
-aws s3 cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
+if [[ "$DATABASE_DUMP_FILE_PATH" == s3://* ]]; then
+  aws s3 cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
+else
+  cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
+fi
 gzip -d dump.sql.gz
 pgPod=$(kubectl get pods -l app=lb-postgres -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$pgPod":/tmp/
