@@ -1,0 +1,9 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: lb-postgres-data
+spec:
+  storageClassName: STORAGE_CLASS_NAME
+  resources:
+    requests:
+      storage: STORAGE_SIZE

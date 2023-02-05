@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+commonLabels:
+  app: lb-postgres
+namespace: NAMESPACE
+resources:
+  - ../base
+  - pg_secret.yaml
+patchesStrategicMerge:
+  - pv-patch.yaml
+  - pg_secret.yaml
+patches:
+- target:
+    kind: *
+    name: .*
+  patch: |-
+    - op: replace
+      path: /metadata/name
+      value: RELEASE_NAME
