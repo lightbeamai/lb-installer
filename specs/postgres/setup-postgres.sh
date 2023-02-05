@@ -26,6 +26,7 @@ metadata:
 type: Opaque
 data:
   POSTGRES_PASSWORD: "PG_PASSWORD"
+  POSTGRES_USER: "cG9zdGdyZXMK"
 EOF
 cat <<'EOF' > overlays/pv-patch.yaml
 kind: PersistentVolumeClaim
