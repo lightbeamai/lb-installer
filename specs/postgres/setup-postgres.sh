@@ -92,11 +92,14 @@ pgPassword=$(echo "$POSTGRES_PASSWORD" | base64)
 sed -i "s/PG_PASSWORD/$pgPassword/g" overlays/pg_secret.yaml
 kubectl create ns "$NAMESPACE" || true
 kubectl kustomize overlays/
-kubectl kustomize overlays/ | kubectl "$ACTION" -f -
-rm -rf overlays
 if [[ "$ACTION" == delete ]]; then
+  kubectl kustomize overlays/ | kubectl "$ACTION" --ignore-not-found=true -f -
+  rm -rf overlays
   exit 0
 fi
+
+kubectl kustomize overlays/ | kubectl "$ACTION" -f -
+rm -rf overlays
 kubectl wait --for=condition=ready pod -l app="$NAME"  -n "$NAMESPACE" --timeout 300s
 pushd "$WORK_DIR"
 if [[ "$DATABASE_DUMP_FILE_PATH" == s3://* ]]; then
