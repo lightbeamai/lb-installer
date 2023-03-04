@@ -46,21 +46,10 @@ DATASOURCE_STATS_AGGREGATOR_DEPLOY_NAME="lightbeam-datasource-stats-aggregator"
 POLICY_ENGINE_DEPLOY_NAME="lightbeam-policy-engine"
 POLICY_CONSUMER_DEPLOY_NAME="lightbeam-policy-consumer"
 DATASOURCE_STATS_AGGREGATOR_KAFKA_QUEUE="datasource-stats"
-REQUIRED_COMMANDS=('jq' 'mongodump')
 
 if [ -z ${NAMESPACE} ]; then
   NAMESPACE=$LB_DEFAULT_NAMESPACE
 fi
-
-for cmd in "${REQUIRED_COMMANDS[@]}"
-do
-  echo "Checking for command $cmd"
-  if ! command -v "$cmd" &> /dev/null
-  then
-      echo "Command $cmd could not be found, Exiting"
-      exit 1
-  fi
-done
 
 if [[ -z ${STOP_SERVICES} || -z ${START_SERVICES} ]]; then
    usage
