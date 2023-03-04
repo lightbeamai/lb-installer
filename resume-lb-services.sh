@@ -6,6 +6,7 @@ NAMESPACE="lightbeam"
 API_GATEWAY_DEPLOYMENT_NAME="lightbeam-api-gateway"
 PRESIDIO_SERVER_DEPLOYMENT_NAME="lightbeam-presidio-server"
 TEXT_EXTRACTION_DEPLOYMENT_NAME="lightbeam-text-extraction"
+TIKA_DEPLOYMENT_NAME="lightbeam-tika-server"
 DATASOURCE_STATS_AGGREGATOR_DEPLOY_NAME="lightbeam-datasource-stats-aggregator"
 POLICY_ENGINE_DEPLOY_NAME="lightbeam-policy-engine"
 POLICY_CONSUMER_DEPLOY_NAME="lightbeam-policy-consumer"
@@ -32,7 +33,8 @@ for deploy in $(kubectl get deploy -o=jsonpath="{.items[*]['metadata.name']}" -n
   if [[ "$deploy" =~ lb-.*-consumer.* ]] || [[ "$deploy" =~ lb-.*-producer.* ]] ||
   [[ "$deploy" == "$API_GATEWAY_DEPLOYMENT_NAME" ]] || [[ "$deploy" == "$PRESIDIO_SERVER_DEPLOYMENT_NAME" ]] ||
   [[ "$deploy" == "$TEXT_EXTRACTION_DEPLOYMENT_NAME" ]] || [[ "$deploy" == "$POLICY_ENGINE_DEPLOY_NAME" ]] ||
-  [[ "$deploy" == "$POLICY_CONSUMER_DEPLOY_NAME" ]]; then
+  [[ "$deploy" == "$POLICY_CONSUMER_DEPLOY_NAME" ]] || [[ "$deploy" == "$TIKA_DEPLOYMENT_NAME" ]] ||
+  [[ "$deploy" == "$DATASOURCE_STATS_AGGREGATOR_DEPLOY_NAME" ]]; then
     echo "Scaling up replicas of deployment $deploy to $REPLICAS"
     kubectl scale deploy "$deploy" -n $NAMESPACE --replicas=$REPLICAS
   fi
