@@ -51,7 +51,7 @@ if [ -z ${NAMESPACE} ]; then
   NAMESPACE=$LB_DEFAULT_NAMESPACE
 fi
 
-if [[ -z ${STOP_SERVICES} || -z ${START_SERVICES} ]]; then
+if [[ -z ${STOP_SERVICES} && -z ${START_SERVICES} ]]; then
    usage
 fi
 
