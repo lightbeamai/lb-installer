@@ -1,4 +1,13 @@
 USE DATABASE LB_DATABASE_NAME;
+SELECT
+    table_schema AS schema_name,
+    count(TABLE_NAME) AS table_count
+FROM
+    LB_DATABASE_NAME.INFORMATION_SCHEMA."TABLES"
+WHERE
+    table_schema not in ('INFORMATION_SCHEMA')
+GROUP BY
+    table_schema;
 SHOW PRIMARY KEYS in DATABASE LB_DATABASE_NAME;
 SELECT
         replace(c.column_name, '/', '_') AS column_name,
@@ -39,3 +48,14 @@ SELECT
             AND c.TABLE_SCHEMA = t.TABLE_SCHEMA
         ORDER BY
             c.TABLE_NAME, c.TABLE_SCHEMA;
+SHOW IMPORTED KEYS in DATABASE LB_DATABASE_NAME;
+SELECT
+    "pk_schema_name" AS l_schema_name,
+    replace("pk_table_name", '/', '_') AS l_table_name,
+    replace("pk_column_name", '/', '_') AS l_column_name,
+    "fk_schema_name" AS r_schema_name,
+    replace("fk_table_name", '/', '_') AS r_table_name,
+    replace("fk_column_name", '/', '_') AS r_column_name,
+    "fk_name" AS constraint_name
+FROM
+    TABLE (result_scan (last_query_id ()));
