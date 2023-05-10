@@ -125,7 +125,7 @@ do
     end_time=$(date +%s)
     timeElapsedSeconds=$(echo "$end_time - $start_time" | bc)
 
-    if [[ "$timeElapsedSeconds" -gt "POSTGRES_READY_TIMEOUT_SECONDS" ]]; then
+    if [[ "$timeElapsedSeconds" -gt "$POSTGRES_READY_TIMEOUT_SECONDS" ]]; then
       echo "Spent $POSTGRES_READY_TIMEOUT_SECONDS seconds waiting for Postgres instance to come up. Giving up."
       exit 1
     fi
