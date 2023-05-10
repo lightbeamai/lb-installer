@@ -2,6 +2,8 @@
 
 set -euxo
 
+readonly POSTGRES_READY_TIMEOUT_SECONDS=300
+readonly POSTGRES_READY_WAIT_POLL_SECONDS=10
 readonly WORK_DIR="$(mktemp -d)"
 ACTION=$1
 STORAGE_CLASS_NAME=$2
@@ -100,7 +102,35 @@ fi
 
 kubectl kustomize overlays/ | kubectl "$ACTION" -f -
 rm -rf overlays
-kubectl wait --for=condition=ready pod -l app="$NAME"  -n "$NAMESPACE" --timeout 300s
+
+start_time=$(date +%s)
+while true
+do
+    success=0
+    for pod_name in $(kubectl get pods -l app="$NAME" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}')
+    do
+        if [[ $(kubectl  get po "$pod_name" -o jsonpath='{.status.containerStatuses[*].ready}') == 'true'  ]]
+          then
+            echo "The postgres instance is ready with pod name $pod_name. Starting data dump now."
+            success=1
+            break
+        fi
+    done
+    if [[ "$success" == 1 ]]
+     then
+       break
+    fi
+    echo "The postgres instance is not yet ready. Waiting for $POSTGRES_READY_WAIT_POLL_SECONDS seconds before checking again."
+    sleep "$POSTGRES_READY_WAIT_POLL_SECONDS"
+    end_time=$(date +%s)
+    timeElapsedSeconds=$(echo "$end_time - $start_time" | bc)
+
+    if [[ "$timeElapsedSeconds" -gt "$POSTGRES_READY_TIMEOUT_SECONDS" ]]; then
+      echo "Spent $POSTGRES_READY_TIMEOUT_SECONDS seconds waiting for Postgres instance to come up. Giving up."
+      exit 1
+    fi
+done
+
 pushd "$WORK_DIR"
 if [[ "$DATABASE_DUMP_FILE_PATH" == s3://* ]]; then
   aws s3 cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
