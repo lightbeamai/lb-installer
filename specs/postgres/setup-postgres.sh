@@ -107,9 +107,9 @@ start_time=$(date +%s)
 while true
 do
     success=0
-    for pod_name in $(kubectl get pods -l app="$NAME" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}')
+    for pod_name in $(kubectl get pods -n $NAMESPACE -l app="$NAME" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}')
     do
-        if [[ $(kubectl  get po "$pod_name" -o jsonpath='{.status.containerStatuses[*].ready}') == 'true'  ]]
+        if [[ $(kubectl  get po -n $NAMESPACE "$pod_name" -o jsonpath='{.status.containerStatuses[*].ready}') == 'true'  ]]
           then
             echo "The postgres instance is ready with pod name $pod_name. Starting data dump now."
             success=1
