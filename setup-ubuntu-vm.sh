@@ -108,8 +108,7 @@ kubeadm init
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
-kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
-kubectl -n kube-system set env daemonset/calico-node FELIX_IGNORELOOSERPF=true
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
 echo "6. Remove NoSchedule taint from master:"
 kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/master | awk 'FNR==2{print $1}') node-role.kubernetes.io/master-
