@@ -148,7 +148,7 @@ repo_gpgcheck=1
 gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
 
-yum install -y kubelet-1.21.0-0.x86_64 kubeadm-1.21.0-0.x86_64 kubectl-1.21.0-0.x86_64
+yum install -y kubelet-1.25.0-0.x86_64 kubeadm-1.25.0-0.x86_64 kubectl-1.25.0-0.x86_64
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"

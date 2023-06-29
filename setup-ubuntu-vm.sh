@@ -95,7 +95,7 @@ curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
-apt-get update -y && apt-get install -y kubelet=1.21.0-00 kubeadm=1.21.0-00 kubectl=1.21.0-00
+apt-get update -y && apt-get install -y kubelet=1.25.0-00 kubeadm=1.25.0-00 kubectl=1.25.0-00
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
@@ -108,8 +108,7 @@ kubeadm init
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
-kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
-kubectl -n kube-system set env daemonset/calico-node FELIX_IGNORELOOSERPF=true
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
 echo "6. Remove NoSchedule taint from master:"
 kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/master | awk 'FNR==2{print $1}') node-role.kubernetes.io/master-
