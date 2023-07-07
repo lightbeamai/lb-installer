@@ -1,4 +1,21 @@
 #!/usr/bin/env bash
+
+# Mark packages on hold to avoid auto upgrade.
+sudo apt-mark hold kubelet
+sudo apt-mark hold kubectl
+sudo apt-mark hold kubeadm
+sudo apt-mark hold containerd.io
+sudo apt-mark hold docker-buildx-plugin
+sudo apt-mark hold docker-ce
+sudo apt-mark hold docker-cli
+sudo apt-mark hold docker-ce-rootless-extras
+sudo apt-mark hold docker-compose-plugin
+sudo apt-mark hold snapd
+sudo apt-mark hold systemd
+sudo apt-mark hold systemd-sysv
+sudo apt-mark hold systemd-timesyncd
+
+# Install docker.
 sudo apt-get -y remove docker docker-engine docker.io containerd runc
 sudo apt-get update -y
 sudo apt-get install -y \
@@ -111,7 +128,7 @@ echo "5. Install network driver:"
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
 echo "6. Remove NoSchedule taint from master:"
-kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/master | awk 'FNR==2{print $1}') node-role.kubernetes.io/master-
+kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/control-plane | awk 'FNR==2{print $1}') node-role.kubernetes.io/control-plane-
 
 while true
   do
