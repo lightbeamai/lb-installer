@@ -138,6 +138,21 @@ function serviceStatusCheck() {
 sudo systemctl enable --now cri-o
 sudo systemctl start cri-o
 
+sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.access.redhat.com
+sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.redhat.io
+
+cat <<EOF > /etc/containers/registries.d/registry.access.redhat.com.yaml
+docker:
+     registry.access.redhat.com:
+         sigstore: https://access.redhat.com/webassets/docker/content/sigstore
+EOF
+
+cat <<EOF > /etc/containers/registries.d/registry.redhat.io.yaml
+docker:
+     registry.redhat.io:
+         sigstore: https://registry.redhat.io/containers/sigstore
+EOF
+
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -148,7 +163,7 @@ repo_gpgcheck=1
 gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
 
-yum install -y kubelet-1.25.0-0.x86_64 kubeadm-1.25.0-0.x86_64 kubectl-1.25.0-0.x86_64
+yum install -y kubelet-1.21.0-0.x86_64 kubeadm-1.21.0-0.x86_64 kubectl-1.21.0-0.x86_64
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"
@@ -171,8 +186,8 @@ kubectl taint nodes --all node-role.kubernetes.io/master-
 if [ $install_docker = "true" ]; then
   kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
 else
-  kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
-  kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
+  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
 fi
 
 echo "3. Setup helm"
