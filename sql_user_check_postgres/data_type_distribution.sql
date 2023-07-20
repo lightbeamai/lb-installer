@@ -10,8 +10,7 @@ FROM
         FROM
             information_schema.columns
         WHERE
-            table_schema NOT LIKE 'pg_%' -- Exclude system schemas
-            AND table_schema != 'information_schema' -- Exclude information_schema schema
+            table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'pg_temp_1', 'pg_toast_temp1')
     ) AS columns
 CROSS JOIN
     (
@@ -20,8 +19,7 @@ CROSS JOIN
         FROM
             information_schema.columns
         WHERE
-            table_schema NOT LIKE 'pg_%' -- Exclude system schemas
-            AND table_schema != 'information_schema' -- Exclude information_schema schema
+            table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'pg_temp_1', 'pg_toast_temp1')
     ) AS totals
 GROUP BY
     column_type,
