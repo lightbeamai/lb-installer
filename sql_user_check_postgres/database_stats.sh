@@ -23,6 +23,12 @@ echo "port: $port";
 echo "mode: $mode";
 echo "outputfile: $outputfile";
 
+# Check if psql command is available
+if command -v psql &>/dev/null; then
+    echo "psql is installed and available."
+else
+    echo "psql is NOT installed or not in the system's PATH."
+fi
 
 if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$outputfile" ]; then
         echo 'Missing mandatory args: -h <DB_HOST>, -u <DB_USER>, -o <OUTPUT_FILE> or -d <DATABASE_NAME>' >&2
