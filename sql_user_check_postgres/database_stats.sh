@@ -37,20 +37,20 @@ fi
 
 
 if [ "$mode" == "stats" ]; then
-  echo -e "\n\n===============Database list with size============" > ~/test_database_stats.out
+  echo -e "\n\n===============Database list with size============" > $outputfile
   psql -h $dbhost -U $username -f ./database_list_with_size.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Total tables, rows, columns and size per schema============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Total tables, rows, columns and size per schema============" >> $outputfile
   psql -h $dbhost -U $username -f ./tables_rows_columns_size_per_schema.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Data type distribution============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Data type distribution============" >> $outputfile
   psql -h $dbhost -U $username -f ./data_type_distribution.sql -p $port -d $database >> $outputfile
 
 elif [ "$mode" == "full_metadata" ]; then
-  echo -e "\n\n===============Complete metadata============" > ~/test_database_stats.out
+  echo -e "\n\n===============Complete metadata============" > $outputfile
   psql -h $dbhost -U $username -f ./complete_metadata.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Referential Relations============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Referential Relations============" >> $outputfile
   psql -h $dbhost -U $username -f ./referential_relations.sql -p $port -d $database >> $outputfile
 
 else
