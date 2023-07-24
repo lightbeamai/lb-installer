@@ -3,6 +3,7 @@
 mode="stats"
 port="1433"
 
+set -e
 
 while getopts h:u:d:o:m:p flag
 do
@@ -17,20 +18,12 @@ do
 done
 
 
-echo "dbhost: $dbhost";
-echo "username: $username";
-echo "database: $database";
-echo "mode: $mode";
-echo "outputfile: $outputfile";
-echo "port: $port";
+echo "dbhost: $dbhost username: $username database: $database mode: $mode outputfile: $outputfile port: $port";
 
-
-# Check if psql command is available
-if command -v sqlcmd &>/dev/null; then
-    echo "sqlcmd is installed and available."
-else
-    echo "sqlcmd is NOT installed or not in the system's PATH. \
-    Follow https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-setup-tools to install sqlcmd"
+# Check if sqlcmd command is available
+if ! command -v sqlcmd &>/dev/null; then
+    echo "sqlcmd is not installed and available. Follow https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-setup-tools to install sqlcmd"
+    exit 1
 fi
 
 if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$outputfile" ]; then

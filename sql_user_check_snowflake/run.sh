@@ -9,6 +9,7 @@ readonly DATABASE=$SF_DATABASE
 readonly WAREHOUSE=$WAREHOUSE_NAME
 readonly ROLE=$ROLE_NAME
 readonly MODE=$MODE
+readonly OUTPUT=$OUTPUT
 
 if ! command -v "$CMD" &> /dev/null
 then
@@ -20,12 +21,12 @@ fi
 if [ "$MODE" == "stats" ]; then
   tempQueryFile=$(mktemp)
   sed "s/LB_DATABASE_NAME/$DATABASE/g" stats_queries.sql > "$tempQueryFile"
-  snowsql -a "$ACCOUNT" --username "$USERNAME" -f "$tempQueryFile" -w "$WAREHOUSE" -r "$ROLE"
+  snowsql -a "$ACCOUNT" --username "$USERNAME" -f "$tempQueryFile" -w "$WAREHOUSE" -r "$ROLE" -o output_file="$OUTPUT"
 
 elif [ "$MODE" == "full_metadata" ]; then
   tempQueryFile=$(mktemp)
   sed "s/LB_DATABASE_NAME/$DATABASE/g" queries.sql > "$tempQueryFile"
-  snowsql -a "$ACCOUNT" --username "$USERNAME" -f "$tempQueryFile" -w "$WAREHOUSE" -r "$ROLE"
+  snowsql -a "$ACCOUNT" --username "$USERNAME" -f "$tempQueryFile" -w "$WAREHOUSE" -r "$ROLE" -o output_file="$OUTPUT"
 
 else
   echo "Mode should be either stats or full_metadata, found: $mode"

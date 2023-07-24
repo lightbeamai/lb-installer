@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 port="5432"
 mode="stats"
 
@@ -16,18 +18,12 @@ do
 done
 
 
-echo "dbhost: $dbhost";
-echo "username: $username";
-echo "database: $database";
-echo "port: $port";
-echo "mode: $mode";
-echo "outputfile: $outputfile";
+echo "dbhost: $dbhost username: $username database: $database port: $port mode: $mode outputfile: $outputfile";
 
 # Check if psql command is available
-if command -v psql &>/dev/null; then
-    echo "psql is installed and available."
-else
-    echo "psql is NOT installed or not in the system's PATH."
+if ! command -v psql &>/dev/null; then
+    echo "psql is not installed or available."
+    exit 1
 fi
 
 if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$outputfile" ]; then
