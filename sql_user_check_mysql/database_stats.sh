@@ -5,14 +5,13 @@ set -e
 port="3306"
 mode="stats"
 
-while getopts h:u:m:o:P:p flag
+while getopts h:u:m:o:p flag
 do
     case "${flag}" in
         h) dbhost=${OPTARG};;
         u) username=${OPTARG};;
         m) mode=${OPTARG};;
         o) outputfile=${OPTARG};;
-        P) password=${OPTARG};;
         p) port=${OPTARG};;
     esac
 done
@@ -22,12 +21,15 @@ echo "dbhost: $dbhost username: $username port: $port mode: $mode outputfile: $o
 
 # Check if mysql command is available
 if ! command -v mysql &>/dev/null; then
-    echo "mysql is NOT installed or available."
+    echo "mysql is not installed or available."
     exit 1
 fi
 
-if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$outputfile" ] || [ -z "$password" ]; then
-        echo 'Missing mandatory args: -h <DB_HOST>, -u <DB_USER>, -P <password> or -o <OUTPUT_FILE>' >&2
+echo "Enter User's $username password"
+read -s password
+
+if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$outputfile" ]; then
+        echo 'Missing mandatory args: -h <DB_HOST>, -u <DB_USER> or -o <OUTPUT_FILE>' >&2
         exit 1
 fi
 
