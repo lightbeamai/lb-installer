@@ -5,7 +5,7 @@ set -e
 port="5439"
 mode="stats"
 
-while getopts h:u:d:m:o:P:p flag
+while getopts h:u:d:m:o:p flag
 do
     case "${flag}" in
         h) dbhost=${OPTARG};;
@@ -13,18 +13,26 @@ do
         d) database=${OPTARG};;
         m) mode=${OPTARG};;
         o) outputfile=${OPTARG};;
-        P) password=${OPTARG};;
         p) port=${OPTARG};;
     esac
 done
 
-export PGPASSWORD=$password
+echo "Enter User's $username password"
+read -s PASSWORD
+export PGPASSWORD=$PASSWORD
+
+cleanup() {
+    unset PGPASSWORD
+}
+
+# Set trap to call the cleanup function when the script exits
+trap cleanup EXIT
 
 echo "dbhost: $dbhost username: $username database: $database port: $port mode: $mode outputfile: $outputfile";
 
 # Check if psql command is available
 if ! command -v psql &>/dev/null; then
-    echo "psql is installed and available."
+    echo "psql is not installed or available."
     exit 1
 fi
 
