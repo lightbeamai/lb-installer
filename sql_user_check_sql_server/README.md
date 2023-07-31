@@ -6,8 +6,14 @@ Install [sqlcmd](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-se
 
 ### Run the script
 
+Below command will ask password.
+
+stats Mode:
 ```shell
-SERVER='<HOSTNAME>,<PORT_NUMBER>' SS_USERNAME=<USERNAME> SS_DATABASE=<DATABASE TO CONNECT> bash run.sh
+./database_stats.sh -h <HOSTNAME> -u <USERNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE_PATH>
 ```
 
-This will produce an output file called `lb_ss_output.txt`. Check the content of the file to see whether there are any errors.
+full_metadata Mode:
+```shell
+./database_stats.sh -h <HOSTNAME> -u <USERNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE_PATH> -m full_metadata
+```

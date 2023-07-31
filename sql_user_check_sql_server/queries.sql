@@ -1,4 +1,4 @@
--- Fetch database dictionary
+                                                             -- Fetch database dictionary
 SELECT DISTINCT
             TBL.table_catalog AS [database],
             TBL.TABLE_SCHEMA AS [schema_name],

@@ -18,7 +18,7 @@ SELECT DISTINCT 'default'                       AS schema_name,
                 COALESCE(tt.data_length, 0)     AS table_size
 FROM (SELECT *
       FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE table_schema = '__db_name__') AS c # <--- Update here
+      WHERE table_schema NOT IN('information_schema', 'performance_schema', 'mysql', 'sys', 'innodb')) AS c
          LEFT JOIN INFORMATION_SCHEMA.tables AS tt ON c.table_schema = tt.table_schema
     AND c.table_name = tt.table_name
          LEFT JOIN (SELECT DISTINCT tc.table_schema         AS SCHEMA_NAME,

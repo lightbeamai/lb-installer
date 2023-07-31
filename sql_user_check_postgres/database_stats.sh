@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 port="5432"
 mode="stats"
 
@@ -16,18 +18,12 @@ do
 done
 
 
-echo "dbhost: $dbhost";
-echo "username: $username";
-echo "database: $database";
-echo "port: $port";
-echo "mode: $mode";
-echo "outputfile: $outputfile";
+echo "dbhost: $dbhost username: $username database: $database port: $port mode: $mode outputfile: $outputfile";
 
 # Check if psql command is available
-if command -v psql &>/dev/null; then
-    echo "psql is installed and available."
-else
-    echo "psql is NOT installed or not in the system's PATH."
+if ! command -v psql &>/dev/null; then
+    echo "psql is not installed or available."
+    exit 1
 fi
 
 if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$outputfile" ]; then
@@ -37,20 +33,20 @@ fi
 
 
 if [ "$mode" == "stats" ]; then
-  echo -e "\n\n===============Database list with size============" > ~/test_database_stats.out
+  echo -e "\n\n===============Database list with size============" > $outputfile
   psql -h $dbhost -U $username -f ./database_list_with_size.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Total tables, rows, columns and size per schema============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Total tables, rows, columns and size per schema============" >> $outputfile
   psql -h $dbhost -U $username -f ./tables_rows_columns_size_per_schema.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Data type distribution============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Data type distribution============" >> $outputfile
   psql -h $dbhost -U $username -f ./data_type_distribution.sql -p $port -d $database >> $outputfile
 
 elif [ "$mode" == "full_metadata" ]; then
-  echo -e "\n\n===============Complete metadata============" > ~/test_database_stats.out
+  echo -e "\n\n===============Complete metadata============" > $outputfile
   psql -h $dbhost -U $username -f ./complete_metadata.sql -p $port -d $database >> $outputfile
 
-  echo -e "\n\n===============Referential Relations============" >> ~/test_database_stats.out
+  echo -e "\n\n===============Referential Relations============" >> $outputfile
   psql -h $dbhost -U $username -f ./referential_relations.sql -p $port -d $database >> $outputfile
 
 else
