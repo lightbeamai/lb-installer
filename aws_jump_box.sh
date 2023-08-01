@@ -12,8 +12,6 @@ wget https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz
 tar -xvf helm-v3.3.4-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/
 
-sudo curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
 # Mark packages on hold to avoid auto upgrade.
 sudo apt-mark hold kubelet
 sudo apt-mark hold kubectl
@@ -55,6 +53,18 @@ if [ $docker_status == 1 ]; then
 else
    echo "Docker installed but not running.."
 fi
+
+# Setup terraform CLI.
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+sudo apt-get update && sudo apt-get install terraform=v1.3.7
+
+# Setup aws cli.
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+aws --version
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python

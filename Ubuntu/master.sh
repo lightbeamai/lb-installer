@@ -15,6 +15,9 @@ sudo apt-mark hold systemd
 sudo apt-mark hold systemd-sysv
 sudo apt-mark hold systemd-timesyncd
 
+TIMEOUT=300
+SLEEP_INTERVAL=1
+
 # Install docker.
 sudo apt-get -y remove docker docker-engine docker.io containerd runc
 sudo apt-get update -y
@@ -42,8 +45,17 @@ else
    echo "Docker installed but not running.."
 fi
 
-TIMEOUT=300
-SLEEP_INTERVAL=1
+# Disable Swap Permanently.
+sudo swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
+sudo sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
+sudo systemctl mask swap.target               # Completely disabled.
+
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+sudo systemctl disable firewalld
+sudo systemctl status firewalld
+sudo rm /etc/containerd/config.toml
+sudo systemctl restart containerd
 
 export dotCount=0
 export maxDots=15
@@ -112,7 +124,7 @@ curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
-apt-get update -y && apt-get install -y kubelet=1.25.0-00 kubeadm=1.25.0-00 kubectl=1.25.0-00
+apt-get update -y && apt-get install -y kubelet=1.23.0-00 kubeadm=1.23.0-00 kubectl=1.23.0-00
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
@@ -121,7 +133,7 @@ curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && tar -xvf helm-v
 helm version
 
 echo "4. Initialize kubernetes cluster:"
-kubeadm init
+kubeadm init --pod-network-cidr=192.168.0.0/16
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
@@ -147,6 +159,10 @@ while true
       exit 1
     fi
   done
+
+# Setup python3.
+sudo cp /usr/bin/python3 /usr/bin/python
+sudo apt install python3-pip
 
 echo "Done! Ready to deploy LightBeam Cluster!!"
 

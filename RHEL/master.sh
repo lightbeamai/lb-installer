@@ -27,11 +27,9 @@ cat <<EOF | sudo tee /etc/docker/daemon.json
 EOF
 systemctl daemon-reload && systemctl restart docker
   fi
-
 else
   echo "Installing podman podman-docker iproute-tc"
   sudo yum install -y iproute-tc podman podman-docker vim
-
 fi
 
 
@@ -66,7 +64,7 @@ sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
 systemctl status firewalld
 
-export VERSION=1.21
+export VERSION=1.23
 sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_8/devel:kubic:libcontainers:stable.repo
 sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/CentOS_8/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo
 sudo yum install cri-o -y
@@ -163,7 +161,7 @@ repo_gpgcheck=1
 gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
 
-yum install -y kubelet-1.21.0-0.x86_64 kubeadm-1.21.0-0.x86_64 kubectl-1.21.0-0.x86_64
+yum install -y kubelet-1.23.0-0.x86_64 kubeadm-1.23.0-0.x86_64 kubectl-1.23.0-0.x86_64
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"
@@ -193,3 +191,9 @@ fi
 echo "3. Setup helm"
 sudo curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && sudo tar -xvf helm-v3.3.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.3.4-linux-amd64.tar.gz
 helm version
+
+# Setup python3.
+sudo cp /usr/bin/python3 /usr/bin/python
+sudo yum install python3-pip
+
+echo "Done! Ready to deploy LightBeam Cluster!!"
