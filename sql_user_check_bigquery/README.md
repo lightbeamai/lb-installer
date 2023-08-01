@@ -14,14 +14,18 @@ top of google cloud console page. It looks something like this `essential-smoke-
 gcloud auth activate-service-account  --key-file=<service-account.json file path> --project=<project id>
 ``
 
-### Run the script (from sql_user_check_bigquery directory)
+### Run the script from `sql_user_check_bigquery` directory
+
+The script can be run by providing 0 or more DATASETIDS. If DATASETIDS are not provided, script
+will fetch list of DATASETIDS in the given project and run queries for each of them. Multiple DATASETIDS
+can also be provided as comma seperate list like DATASETIDS=a1,a2,a3
 
 stats Mode:
 ```shell
-MODE=stats DATASETID=<dataset id> OUTPUT=<output file path>  bash run.sh
+MODE=stats DATASETIDS=<dataset id> OUTPUT=<output file path>  bash run.sh
 ```
 
 full_metadata Mode:
 ```shell
-MODE=full_metadata DATASETID=<dataset id> OUTPUT=<output file path>  bash run.sh
+MODE=full_metadata DATASETIDS=<dataset id> OUTPUT=<output file path>  bash run.sh
 ```
