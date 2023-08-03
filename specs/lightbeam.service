@@ -1,0 +1,17 @@
+[Unit]
+Description=LightBeam Application
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+StartLimitIntervalSec=500
+StartLimitBurst=10000
+
+[Service]
+Type=notify
+Restart=always
+RestartSec=1
+TimeoutSec=5
+WatchdogSec=5
+ExecStart=/usr/local/bin/lightbeam.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+               "eks:ListTagsForResource",
+                "eks:DescribeNodegroup",
+                "eks:ListNodegroups",
+                "eks:DescribeCluster",
+                "eks:ListClusters",
+                "eks:UpdateClusterVersion",
+                "eks:UpdateNodegroupVersion",
+                "eks:ListUpdates",
+                "eks:UntagResource",
+                "eks:ListFargateProfiles",
+                "eks:DescribeUpdate",
+                "eks:TagResource"
+            ],
+            "Resource": "arn:aws:eks:<AWS_REGION>:<AWS_ACCOUNT_ID>:cluster/<EKS_CLUSTER_NAME>"
+        }
+    ]
+}
