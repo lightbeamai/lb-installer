@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dmesg-collector
+spec:
+  selector:
+    matchLabels:
+      app: dmesg-collector
+  template:
+    metadata:
+      labels:
+        app: dmesg-collector
+    spec:
+      containers:
+      - name: dmesg-collector
+        image: busybox
+        tty: true
+        stdin: true
+        stdinOnce: true
+        securityContext:
+          privileged: true
+        command: ["sh", "-c", "dmesg > /tmp/dmesg.log;sleep 36000"]
+  updateStrategy:
+    type: RollingUpdate
