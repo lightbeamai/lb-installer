@@ -45,6 +45,22 @@ else
    echo "Docker installed but not running.."
 fi
 
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+systemctl restart docker
+sleep 10
+cgroup_driver_status=`docker info | grep -i "Cgroup Driver"  | grep systemd  | wc -l`
+if [ $cgroup_driver_status == 1 ]; then
+   echo "Docker cgroup driver is updated to systemd"
+else
+   echo "Failed to update docker cgroup driver is updated to systemd"
+   exit 1
+fi
+
 # Disable Swap Permanently.
 sudo swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sudo sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.

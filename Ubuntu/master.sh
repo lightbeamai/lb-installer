@@ -45,6 +45,22 @@ else
    echo "Docker installed but not running.."
 fi
 
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+systemctl restart docker
+sleep 10
+cgroupdriver_status=`docker info | grep -i "Cgroup Driver"  | grep systemd  | wc -l`
+if [ $cgroupdriver_status == 1 ]; then
+   echo "Docker cgroup driver is updated to systemd"
+else
+   echo "Failed to update docker cgroup driver is updated to systemd"
+   exit 1
+fi
+
 # Disable Swap Permanently.
 sudo swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sudo sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
@@ -134,13 +150,14 @@ helm version
 
 echo "4. Initialize kubernetes cluster:"
 kubeadm init --pod-network-cidr=192.168.0.0/16
+rm -rf $HOME/.kube
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
 echo "6. Remove NoSchedule taint from master:"
-kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/control-plane | awk 'FNR==2{print $1}') node-role.kubernetes.io/control-plane-
+kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/control-plane | awk 'FNR==2{print $1}') node-role.kubernetes.io/master-
 
 while true
   do
