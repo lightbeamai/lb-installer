@@ -1,11 +1,9 @@
 #!/bin/bash
 
-# Set your variable values here
-instance_url="https://lightbeam.develop.my.salesforce.com"
-client_key="3MVG9n_HvETGhr.......................................MC_twiaGbrj.pF._"
-client_secret="A89A8605ADF6............................................B3B2A"
-
-redirect_uri="https://login.salesforce.com"
+read -rp "Enter Salesforce instance URL: " instance_url
+read -rp "Enter Client Key: " client_key
+read -rp "Enter Client Secret: " client_secret
+read -rp "Enter Redirect URI: " redirect_uri
 
 function obtain_authorization_code {
     instance_url=$1

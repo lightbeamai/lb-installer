@@ -1,8 +1,7 @@
-$instanceUrl = "https://lightbeam.develop.my.salesforce.com"
-$clientId = "3MVG9n_HvETGhr.......................................MC_twiaGbrj.pF._"
-$clientSecret = "A89A8605ADF6............................................B3B2A"
-
-$redirectUri = "https://login.salesforce.com"
+$instanceUrl = Read-Host "Enter Salesforce instance URL"
+$clientId = Read-Host "Enter Client ID"
+$clientSecret = Read-Host "Enter Client Secret"
+$redirectUri = Read-Host "Enter Redirect URI"
 
 function Obtain-AuthorizationCode {
     param (
