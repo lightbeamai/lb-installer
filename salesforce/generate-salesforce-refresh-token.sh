@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 read -rp "Enter Salesforce instance URL: " instance_url
 read -rp "Enter Client Key: " client_key

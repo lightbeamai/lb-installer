@@ -59,7 +59,7 @@ function Main {
 
     Obtain-AccessToken -instanceUrl $instanceUrl -clientKey $clientId -clientSecret $clientSecret -redirectUri $redirectUri -authorizationCode $authorizationCode
 
-    # Prompt for user input before exiting
+    # Prompt for user input before exiting, so that the window doesn't close immediately.
     Read-Host "Press Enter to exit"
 }
 
