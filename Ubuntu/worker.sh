@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
 
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root."
+  exit
+fi
+
 # Mark packages on hold to avoid auto upgrade.
-sudo apt-mark hold kubelet
-sudo apt-mark hold kubectl
-sudo apt-mark hold kubeadm
-sudo apt-mark hold containerd.io
-sudo apt-mark hold docker-buildx-plugin
-sudo apt-mark hold docker-ce
-sudo apt-mark hold docker-cli
-sudo apt-mark hold docker-ce-rootless-extras
-sudo apt-mark hold docker-compose-plugin
-sudo apt-mark hold snapd
-sudo apt-mark hold systemd
-sudo apt-mark hold systemd-sysv
-sudo apt-mark hold systemd-timesyncd
+apt-mark hold kubelet
+apt-mark hold kubectl
+apt-mark hold kubeadm
+apt-mark hold containerd.io
+apt-mark hold docker-buildx-plugin
+apt-mark hold docker-ce
+apt-mark hold docker-cli
+apt-mark hold docker-ce-rootless-extras
+apt-mark hold docker-compose-plugin
+apt-mark hold snapd
+apt-mark hold systemd
+apt-mark hold systemd-sysv
+apt-mark hold systemd-timesyncd
 
 TIMEOUT=300
 SLEEP_INTERVAL=1
 
 # Install docker.
-sudo apt-get -y remove docker docker-engine docker.io containerd runc
-sudo apt-get update -y
-sudo apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg-agent \
-    software-properties-common
+apt-get -y remove docker docker-engine docker.io containerd runc
+apt-get update -y
+apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 
-sudo add-apt-repository \
+add-apt-repository \
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
 
-sudo apt-get update -y
-sudo apt-get install docker-ce docker-ce-cli containerd.io -y
+apt-get update -y
+apt-get install docker-ce docker-ce-cli containerd.io -y
 docker_status=`systemctl status docker | grep "running" | wc -l`
 echo "$docker_status"
 if [ $docker_status == 1 ]; then
@@ -45,17 +45,33 @@ else
    echo "Docker installed but not running.."
 fi
 
-# Disable Swap Permanently.
-sudo swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
-sudo sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
-sudo systemctl mask swap.target               # Completely disabled.
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+systemctl restart docker
+sleep 10
+cgroup_driver_status=`docker info | grep -i "Cgroup Driver"  | grep systemd  | wc -l`
+if [ $cgroup_driver_status == 1 ]; then
+   echo "Docker cgroup driver is updated to systemd"
+else
+   echo "Failed to update docker cgroup driver is updated to systemd"
+   exit 1
+fi
 
-sudo setenforce 0
-sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-sudo systemctl disable firewalld
-sudo systemctl status firewalld
-sudo rm /etc/containerd/config.toml
-sudo systemctl restart containerd
+# Disable Swap Permanently.
+swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
+sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
+systemctl mask swap.target               # Completely disabled.
+
+setenforce 0
+sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+systemctl disable firewalld
+systemctl status firewalld
+rm /etc/containerd/config.toml
+systemctl restart containerd
 
 export dotCount=0
 export maxDots=15
