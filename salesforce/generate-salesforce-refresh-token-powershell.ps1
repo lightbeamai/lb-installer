@@ -36,7 +36,11 @@ function Obtain-AccessToken {
 
     try {
         $response = Invoke-RestMethod -Uri $tokenUrl -Method POST -Body $params -ContentType "application/x-www-form-urlencoded"
-        Write-Output $response
+        Write-Output "`nInstance URL: $($instanceUrl)"
+        Write-Output "`nClient ID: $($clientKey)"
+        Write-Output "`nClient Secret: $($clientSecret)"
+        Write-Output "`nRedirect URI: $($redirectUri)"
+        Write-Output "`n$($response)"
     } catch {
         $errorResponse = $_.Exception.Response
         $responseContent = ""
