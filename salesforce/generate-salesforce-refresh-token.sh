@@ -11,7 +11,7 @@ function obtain_authorization_code {
     redirect_uri=$3
 
     authorization_url="${instance_url}/services/oauth2/authorize?response_type=code&client_id=${client_key}&redirect_uri=${redirect_uri}"
-    printf "\nPlease log in to Salesforce and visit the following URL to obtain the authorization code:"
+    printf "\nPlease log in to Salesforce and visit the following URL to obtain the authorization code:\n"
     echo "$authorization_url"
 }
 
@@ -31,7 +31,10 @@ function obtain_access_token {
         exit 1
     fi
 
-    echo "$response"
+    variables=("Instance URL: $instance_url" "Client Key: $client_key" "Client Secret: $client_secret" "Redirect URL: $redirect_uri" "$response")
+    for variable in "${variables[@]}"; do
+        echo "$variable"
+    done
 }
 
 
