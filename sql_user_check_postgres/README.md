@@ -11,10 +11,10 @@ for database password.
 
 stats Mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE> -p <PORT_NUMBER>
 ```
 
 full_metadata Mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -m full_metadata -o <OUTPUT_FILE>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -m full_metadata -o <OUTPUT_FILE> -p <PORT_NUMBER>
 ```

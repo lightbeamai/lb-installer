@@ -34,10 +34,10 @@ From `sql_user_check_mysql` directory, run these commands depending on mode of s
 
 Stats mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -o <OUTPUT_FILE> -P <PASSWORD>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -o <OUTPUT_FILE> -p <PORT_NUMBER>
 ```
 
 Full metadata mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -m full_metadata -o <OUTPUT_FILE> -P <PASSWORD>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -m full_metadata -o <OUTPUT_FILE> -p <PORT_NUMBER>
 ```

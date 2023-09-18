@@ -15,10 +15,10 @@ From `sql_user_check_redshift` directory, run these commands depending on mode o
 
 Stats mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE>  -P <PASSWORD>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE>  -p <PORT_NUMBER>
 ```
 
 Full metadata mode:
 ```shell
-./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -m full_metadata -o <OUTPUT_FILE> -P <PASSWORD>
+./database_stats.sh -u <DATABASE_USER> -h <DATABASE_HOSTNAME> -d <DATABASE_NAME> -m full_metadata -o <OUTPUT_FILE> -p <PORT_NUMBER>
 ```
