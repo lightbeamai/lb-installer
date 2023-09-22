@@ -5,7 +5,7 @@ port="1433"
 
 set -e
 
-while getopts h:u:d:o:m:p flag
+while getopts h:u:d:o:m:p: flag
 do
     case "${flag}" in
         h) dbhost=${OPTARG};;

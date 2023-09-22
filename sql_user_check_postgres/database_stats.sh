@@ -5,7 +5,7 @@ set -e
 port="5432"
 mode="stats"
 
-while getopts h:u:d:m:o:p flag
+while getopts h:u:d:m:o:p: flag
 do
     case "${flag}" in
         h) dbhost=${OPTARG};;
