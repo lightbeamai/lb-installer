@@ -7,6 +7,7 @@ dnf install docker-ce --allowerasing
 systemctl enable docker
 systemctl start docker
 systemctl status docker
+mkdir /etc/docker/
 
 # Configure docker cgroup driver.
 cat <<EOF > /etc/docker/daemon.json
