@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 echo "1. Install and configure docker."
 dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
 dnf install https://download.docker.com/linux/centos/7/x86_64/stable/Packages/containerd.io-1.2.6-3.3.el7.x86_64.rpm
@@ -67,3 +69,20 @@ kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/contr
 echo "3. Setup helm"
 curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm -f helm-v3.13.1-linux-amd64.tar.gz
 helm version
+
+sudo yum install -y git
+sudo cp /usr/bin/python3 /usr/bin/python
+sudo cp /usr/bin/pip3 /usr/bin/pip
+
+# Install python modules.
+cat <<EOF > requirements.txt
+kubernetes
+docker
+oyaml~=1.0
+requests
+ruamel.yaml~=0.17.21
+EOF
+
+pip install -r requirements.txt
+
+echo "Done! Ready to deploy LightBeam Cluster!!"
