@@ -1,0 +1,11 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: lb-smbshare
+spec:
+  storageClassName: default  # storage provider is Azure disk in Azure and persistent disk in GCE.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

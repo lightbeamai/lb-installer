@@ -158,9 +158,6 @@ mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && c
 echo "5. Install network driver:"
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
-echo "6. Remove NoSchedule taint from master:"
-kubectl taint nodes $(kubectl get nodes --selector=node-role.kubernetes.io/control-plane | awk 'FNR==2{print $1}') node-role.kubernetes.io/master-
-
 while true
   do
     readyNodeCount=$(kubectl get nodes | grep "Ready" | awk '$2' | wc -l)

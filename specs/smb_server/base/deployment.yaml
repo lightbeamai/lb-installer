@@ -1,0 +1,42 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: lb-smb-server
+  namespace: lightbeam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lb-smb-server
+  template:
+    metadata:
+      name: lb-smb-server
+      labels:
+        app: lb-smb-server
+    spec:
+      containers:
+        - name: lb-smb-server
+          image: dperson/samba
+          env:
+            - name: PERMISSIONS
+              value: "0777"
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: smbcreds
+                  key: username
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smbcreds
+                  key: password
+          args: ["-u", "$(USERNAME);$(PASSWORD)", "-s", "share;/smbshare/;yes;no;no;all;none", "-p"]
+          volumeMounts:
+            - mountPath: /smbshare
+              name: data-volume
+          ports:
+            - containerPort: 445
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: lb-smbshare

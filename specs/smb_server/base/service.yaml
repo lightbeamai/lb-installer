@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: lb-smb-server
+  namespace: lightbeam
+  labels:
+    app: lb-smb-server
+spec:
+  type: ClusterIP  # use "LoadBalancer" to get a public ip
+  selector:
+    app: lb-smb-server
+  ports:
+    - port: 445
+      name: lb-smb-server
