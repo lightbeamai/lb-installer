@@ -9,4 +9,4 @@ class and storage size.
 bash setup_smb_server.sh <ACTION> <STORAGE_CLASS TO USE> <SIZE OF STORAGE TO PROVISION> <NAMESPACE TO DEPLOY SMB SERVER> <SMB_USERNAME> <SMB_PASSWORD>
 ```
 
-To create the postgres provide `ACTION=apply`, to destroy supply `ACTION=delete`.
+To deploy the SMB server provide `ACTION=apply`, to destroy supply `ACTION=delete`.
