@@ -132,6 +132,8 @@ do
 done
 
 pushd "$WORK_DIR"
+echo "Manaully copy pg_lightbeam.gz to /tmp/tmp.* directory"
+sleep 10 
 if [[ "$DATABASE_DUMP_FILE_PATH" == s3://* ]]; then
   aws s3 cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
 else
