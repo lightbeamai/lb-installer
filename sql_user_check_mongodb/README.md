@@ -1,12 +1,20 @@
 # Check user permissions for MongoDB
 
+### Pre-requisites
+
+Install [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) on the machine.
 
 ### Run the script
 
-Running the script will print all the databases along with total number of collections and records inside them
-Connection string is input to this script. If looks something like this 
-mongodb://username:password@hostname:port/<database_name>?authSource=admin
+The script prompts for mongo connection string, it looks something like this 
+mongodb://username:password@hostname:port/<database_name>?authSource=admin. It then prompts for databases where comma 
+separated list can be provided for which stats needs to be fetched. If nothing is provided, it defaults for all 
+databases.
+The script supports 2 modes, `stats` and `full_metadata`. Running the script in `stats` mode will print table
+and record count per database.
+Running in `full_metadata` will print table names too along with above stats.
 
-```shell
-connection_string="mongodb://<username>:<password>@<hostname>:<port>/<database_name>?authSource=admin
-" bash run.sh```
+
+```shell 
+bash run.sh
+```

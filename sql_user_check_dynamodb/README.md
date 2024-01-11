@@ -1,9 +1,18 @@
 # Check user permissions for DynamoDB
 
+### Pre-requisites
+
+Install [aws](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on the machine.
+
 ### Run the script
 
-Running the script will print all the regions along with total number of tables and records inside them.
-Script prompts for aws access key and aws secret key.
+The script prompts for AWS access key, AWS secret key and region. It then prompts for regions where comma 
+separated list can be provided for which stats needs to be fetched. If nothing is provided, it defaults 
+for all regions.
+The script supports 2 modes, `stats` and `full_metadata`. Running the script in `stats` mode will print table
+and record count per region.
+Running in `full_metadata` will print table names too along with above stats.
+
 
 ```shell 
 bash run.sh
