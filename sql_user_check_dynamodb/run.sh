@@ -3,7 +3,7 @@
 
 if ! command -v "aws" &> /dev/null
 then
-    echo "Command aws could not be found, Follow https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html to install aws"
+    echo "Command aws could not be found, Follow https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html to install aws CLI"
     exit 1
 fi
 
