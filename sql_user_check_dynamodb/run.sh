@@ -17,7 +17,7 @@ get_table_info() {
 
     for table in $tables; do
         table_count=$((table_count + 1))
-        count=$(aws dynamodb scan --table-name "$table" --region "$region" --select "COUNT" --query "Count")
+        count=$(aws dynamodb describe-table --table-name "$table" --region "$region" --query "Table.ItemCount" --output text)
         total_records=$((total_records + count))
 
         if [ "$mode" == "full_metadata" ]; then
