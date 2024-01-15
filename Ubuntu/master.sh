@@ -180,5 +180,11 @@ while true
 cp /usr/bin/python3 /usr/bin/python
 apt install python3-pip
 
+# Install and setup system activity report
+apt-get install -y sysstat
+echo 'ENABLED="true"' > /etc/default/sysstat
+systemctl enable sysstat
+systemctl start sysstat
+
 echo "Done! Ready to deploy LightBeam Cluster!!"
 

@@ -196,4 +196,9 @@ helm version
 sudo cp /usr/bin/python3 /usr/bin/python
 sudo yum install python3-pip
 
+# Install and setup system activity report
+sudo yum install sysstat
+sudo systemctl enable --now sysstat
+sudo systemctl start sysstat
+
 echo "Done! Ready to deploy LightBeam Cluster!!"
