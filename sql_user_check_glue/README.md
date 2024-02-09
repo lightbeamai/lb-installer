@@ -2,7 +2,7 @@
 
 ### Pre-requisites
 
-Install [aws](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on the machine.
+Install [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on the machine.
 
 ### Run the script
 The script verifies user permissions for Glue and Athena services. 
