@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 sudo apt-get update
-sudo apt-get install unzip jq
+sudo apt-get install -y unzip jq
 
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo chmod +x kubectl
@@ -58,7 +58,7 @@ fi
 sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
 sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install terraform=v1.3.7
+sudo apt-get update && sudo apt-get install -y terraform=v1.3.7
 
 # Setup aws cli.
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -68,4 +68,4 @@ aws --version
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
-sudo apt install python3-pip
+sudo apt install -y python3-pip
