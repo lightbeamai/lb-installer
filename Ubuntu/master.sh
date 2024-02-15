@@ -180,4 +180,6 @@ while true
 cp /usr/bin/python3 /usr/bin/python
 apt install python3-pip -y 
 
+# set default namespace as lightbeam
+kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
