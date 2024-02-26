@@ -41,7 +41,7 @@ sudo apt-get install -y \
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 
-sudo add-apt-repository \
+sudo add-apt-repository -y\
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
@@ -58,10 +58,9 @@ fi
 
 # Setup terraform CLI.
 sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install -y terraform=v1.3.7
-
+wget https://releases.hashicorp.com/terraform/1.7.4/terraform_1.7.4_linux_386.zip
+unzip terraform_1.7.4_linux_386.zip
+sudo mv terraform /usr/local/bin
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
