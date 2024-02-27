@@ -7,6 +7,7 @@ Install [sqlcmd](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-se
 ### Run the script
 
 Below command will ask password.
+For trusting server certificate add -c 1. For Microsoft Entra/AD authentication add -a 1 
 
 stats Mode:
 ```shell
@@ -17,3 +18,5 @@ full_metadata Mode:
 ```shell
 ./database_stats.sh -h <HOSTNAME> -u <USERNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE_PATH> -m full_metadata -p <PORT_NUMBER>
 ```
+
+
