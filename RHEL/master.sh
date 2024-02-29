@@ -189,7 +189,7 @@ else
 fi
 
 echo "3. Setup helm"
-sudo curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && sudo tar -xvf helm-v3.3.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.3.4-linux-amd64.tar.gz
+sudo curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && sudo tar -xvf helm-v3.13.1-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.13.1-linux-amd64.tar.gz
 helm version
 
 # Setup python3.

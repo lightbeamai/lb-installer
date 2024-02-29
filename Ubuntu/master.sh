@@ -147,7 +147,7 @@ systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet &
 serviceStatusCheck "kubelet.service" "False"
 
 echo "3. Setup helm"
-curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && tar -xvf helm-v3.3.4-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.3.4-linux-amd64.tar.gz
+curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.13.1-linux-amd64.tar.gz
 helm version
 
 echo "4. Initialize kubernetes cluster:"
