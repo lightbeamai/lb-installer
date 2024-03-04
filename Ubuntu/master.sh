@@ -142,12 +142,12 @@ curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
-apt-get update -y && apt-get install -y kubelet=1.23.0-00 kubeadm=1.23.0-00 kubectl=1.23.0-00
+apt-get update -y && apt-get install -y kubelet=1.25.0-00 kubeadm=1.25.0-00 kubectl=1.25.0-00
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
 echo "3. Setup helm"
-curl -L -O https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz && tar -xvf helm-v3.3.4-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.3.4-linux-amd64.tar.gz
+curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.13.1-linux-amd64.tar.gz
 helm version
 
 echo "4. Initialize kubernetes cluster:"
@@ -178,7 +178,7 @@ while true
 
 # Setup python3.
 cp /usr/bin/python3 /usr/bin/python
-apt install python3-pip
+apt install python3-pip -y 
 
 # Install and setup system activity report
 apt-get install -y sysstat
@@ -186,5 +186,6 @@ echo 'ENABLED="true"' > /etc/default/sysstat
 systemctl enable sysstat
 systemctl start sysstat
 
+# set default namespace as lightbeam
+kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
-

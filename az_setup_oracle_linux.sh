@@ -14,8 +14,8 @@ sudo mv kubectl /usr/local/bin/
 kubectl version
 
 # Install helm.
-wget https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz
-tar -xvf helm-v3.3.4-linux-amd64.tar.gz
+wget https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
+tar -xvf helm-v3.13.1-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/
 
 # Install az-cli.

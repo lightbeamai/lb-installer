@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
 sudo apt-get update
-sudo apt-get install unzip jq
+sudo apt-get install -y unzip jq
 
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 kubectl version
 
-wget https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz
-tar -xvf helm-v3.3.4-linux-amd64.tar.gz
+wget https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
+tar -xvf helm-v3.13.1-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/
 
 sudo curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
@@ -41,7 +41,7 @@ sudo apt-get install -y \
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 
-sudo add-apt-repository \
+sudo add-apt-repository -y\
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
@@ -56,9 +56,15 @@ else
    echo "Docker installed but not running.."
 fi
 
+# Setup terraform CLI.
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
+wget https://releases.hashicorp.com/terraform/1.7.4/terraform_1.7.4_linux_386.zip
+unzip terraform_1.7.4_linux_386.zip
+sudo mv terraform /usr/local/bin
+
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
-sudo apt install python3-pip
+sudo apt install -y python3-pip
 
 # Install and setup system activity report
 apt-get install -y sysstat

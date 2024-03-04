@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
 sudo apt-get update
-sudo apt-get install unzip jq
+sudo apt-get install -y unzip jq
 
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 kubectl version
 
-wget https://get.helm.sh/helm-v3.3.4-linux-amd64.tar.gz
-tar -xvf helm-v3.3.4-linux-amd64.tar.gz
+wget https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
+tar -xvf helm-v3.13.1-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/
 
 # Mark packages on hold to avoid auto upgrade.
@@ -58,7 +58,7 @@ fi
 sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
 sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install terraform=v1.3.7
+sudo apt-get update && sudo apt-get install -y terraform=v1.3.7
 
 # Setup aws cli.
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -68,7 +68,7 @@ aws --version
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
-sudo apt install python3-pip
+sudo apt install -y python3-pip
 
 # Install and setup system activity report
 apt-get install -y sysstat
