@@ -32,6 +32,11 @@ systemctl enable docker.service
 systemctl start docker.service
 systemctl status docker.service
 
+# Install and setup system activity report
+sudo dnf install sysstat
+systemctl enable --now sysstat
+systemctl start sysstat
+
 # Configure python-pip
 cp /usr/bin/pip3 /usr/bin/pip
 

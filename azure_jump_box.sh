@@ -65,3 +65,10 @@ sudo mv terraform /usr/local/bin
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
 sudo apt install -y python3-pip
+
+# Install and setup system activity report
+apt-get install -y sysstat
+echo 'ENABLED="true"' > /etc/default/sysstat
+systemctl enable sysstat
+systemctl start sysstat
+

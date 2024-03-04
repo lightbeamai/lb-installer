@@ -164,3 +164,9 @@ EOF
 yum install -y kubelet-1.23.0-0.x86_64 kubeadm-1.23.0-0.x86_64 kubectl-1.23.0-0.x86_64
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet
+
+# Install and setup system activity report
+sudo yum install sysstat
+sudo systemctl enable --now sysstat
+sudo systemctl start sysstat
+

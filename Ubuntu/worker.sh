@@ -143,3 +143,10 @@ EOF
 apt-get update -y && apt-get install -y kubelet=1.25.0-00 kubeadm=1.25.0-00 kubectl=1.25.0-00
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
+
+# Install and setup system activity report
+apt-get install -y sysstat
+echo 'ENABLED="true"' > /etc/default/sysstat
+systemctl enable sysstat
+systemctl start sysstat
+
