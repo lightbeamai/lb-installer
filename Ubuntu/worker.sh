@@ -8,12 +8,12 @@ fi
 TIMEOUT=300
 SLEEP_INTERVAL=1
 
-# Remove the older packages.
+# Remove all older packages.
 apt-get -y remove docker docker-engine docker.io containerd runc kubeadm kubelet kubectl
 
 # Install docker.
 apt-get update -y
-apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common openssh-server apt-transport-https curl
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 
@@ -122,15 +122,15 @@ function serviceStatusCheck() {
 }
 
 echo "2. Install kubeadm, kubectl and kubelet:"
-apt-get update -y && apt-get install -y openssh-server apt-transport-https curl
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 mkdir -p /etc/apt/keyrings
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 apt-get update -y && apt-get install -y kubelet=1.28.8-1.1 kubeadm=1.28.8-1.1 kubectl=1.28.8-1.1
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
-# Mark packages on hold to avoid auto upgrade.
+# Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl
 apt-mark hold kubeadm
