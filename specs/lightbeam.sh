@@ -12,7 +12,7 @@ while(true); do
     if [[ $? -ne 0 ]]; then FAIL=1; fi
     status_code=`curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health`
     echo "Lightbeam cluster health check: $status_code"
-    if [[ $? -ne 0 || $status_code -ne 200 || $status_code -ne 301 ]]; then FAIL=1; fi
+    if [[ $? -ne 0 || $status_code -ne 200 && $status_code -ne 301 ]]; then FAIL=1; fi
     if [[ $FAIL -eq 0 ]]; then /bin/systemd-notify WATCHDOG=1; fi
     sleep 1
 done
