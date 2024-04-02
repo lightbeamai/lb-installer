@@ -164,7 +164,61 @@ while true
 
 # Setup python3.
 cp /usr/bin/python3 /usr/bin/python
-apt install python3-pip -y 
+apt install python3-pip -y
+
+# Check if jq is present, if not install it.
+if ! command -v jq &> /dev/null; then
+    echo "'jq' could not be found, installing it now..."
+    # Specify the version you want to install
+    JQ_VERSION="1.6"
+    # Specify the directory where you want to install jq
+    INSTALL_DIR="/usr/local/bin"
+    # Determine OS and Architecture for downloading the correct version
+    OS=$(uname | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64) ARCH_SUFFIX="64" ;;
+        aarch64) ARCH_SUFFIX="arm64" ;;
+        *) echo "Unsupported architecture: $ARCH" ; exit 1 ;;
+    esac
+    # For Linux x86_64, the suffix is 'linux64', for other OS/architectures, adjust accordingly
+    if [ "$OS" == "linux" ] && [ "$ARCH_SUFFIX" == "64" ]; then
+        JQ_BINARY="jq-linux64"
+    elif [ "$OS" == "linux" ] && [ "$ARCH_SUFFIX" == "arm64" ]; then
+        JQ_BINARY="jq-linuxarm64"
+    else
+        echo "Unsupported OS/Architecture combination: $OS/$ARCH"
+        exit 1
+    fi
+    # Download and install jq
+    URL="https://github.com/stedolan/jq/releases/download/jq-${JQ_VERSION}/${JQ_BINARY}"
+    sudo wget jq "$URL" -O "${INSTALL_DIR}/jq" && chmod +x "${INSTALL_DIR}/jq"
+    echo "'jq' installed successfully."
+else
+    echo "'jq' is already installed."
+fi
+
+# Check if yq is present, if not install it.
+if ! command -v yq &> /dev/null; then
+    echo "'yq' could not be found, installing it now..."
+    # Specify the version you want to install
+    YQ_VERSION="v4.6.3"
+    # Specify the directory where you want to install yq
+    INSTALL_DIR="/usr/local/bin"
+    # Determine OS and Architecture for downloading the correct version
+    OS=$(uname | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64) ARCH="amd64" ;;
+        arm64) ARCH="arm64" ;;
+        *) echo "Unsupported architecture: $ARCH" ; exit 1 ;;
+    esac
+    # Download and install yq
+    sudo wget "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${OS}_${ARCH}" -O "${INSTALL_DIR}/yq" && chmod +x "${INSTALL_DIR}/yq"
+    echo "'yq' installed successfully."
+else
+    echo "'yq' is already installed."
+fi
 
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
