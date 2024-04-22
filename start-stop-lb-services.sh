@@ -46,6 +46,7 @@ DATASOURCE_STATS_AGGREGATOR_DEPLOY_NAME="lightbeam-datasource-stats-aggregator"
 POLICY_ENGINE_DEPLOY_NAME="lightbeam-policy-engine"
 POLICY_CONSUMER_DEPLOY_NAME="lightbeam-policy-consumer"
 DATASOURCE_STATS_AGGREGATOR_KAFKA_QUEUE="datasource-stats"
+ER_DEPLOY_NAME="lightbeam-entity-resolution"
 
 if [ -z ${NAMESPACE} ]; then
   NAMESPACE=$LB_DEFAULT_NAMESPACE
