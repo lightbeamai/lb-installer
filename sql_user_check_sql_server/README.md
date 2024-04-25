@@ -6,7 +6,8 @@ Install [sqlcmd](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-se
 
 ### Run the script
 
-Below command will ask password.
+Below command will ask password. If database name is not supplied, script will be executed for all databases in SQL Server.
+One or multiple database names can be provided, in that case script will be executed only for them.
 For trusting server certificate add -c 1. For Microsoft Entra/AD authentication add -a 1 
 
 stats Mode:

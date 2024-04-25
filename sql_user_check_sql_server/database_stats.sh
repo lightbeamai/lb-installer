@@ -16,8 +16,8 @@ do
         o) outputfile=${OPTARG};;
         m) mode=${OPTARG};;
         p) port=${OPTARG};;
-	a) use_ad_auth=${OPTARG};;
-	t) trust_server_cert=${OPTARG};;
+        a) use_ad_auth=${OPTARG};;
+        t) trust_server_cert=${OPTARG};;
     esac
 done
 
@@ -30,7 +30,7 @@ if ! command -v sqlcmd &>/dev/null; then
     exit 1
 fi
 
-if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$outputfile" ]; then
+if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$outputfile" ]; then
         echo 'Missing mandatory args: -h <DB_HOST>, -u <DB_USER>, -o <OUTPUT_FILE> or -d <DATABASE_NAME>' >&2
         exit 1
 fi
@@ -39,26 +39,38 @@ auth_flag=""
 password=""
 if [ "$use_ad_auth" -eq 1 ]; then
     auth_flag="-G"  # Use AD authentication
-    read -p "Password: " password
-    password="-P $password"
 fi
+
+read -p "Password: " password
+password="-P $password"
 
 trust_cert_flag=""
 if [ "$trust_server_cert" -eq 1 ]; then
     trust_cert_flag="-C"  # Trust server certificate
 fi
 
-
-if [ "$mode" == "stats" ]; then
-  sqlcmd -S $dbhost -U $username $password -i ./database_list_with_size.sql -i ./data_type_distribution.sql -i ./other_stats.sql\
-  -d $database -o $outputfile $auth_flag $trust_cert_flag
-
-elif [ "$mode" == "full_metadata" ]; then
-  sqlcmd -S $dbhost -U $username $password -i ./queries.sql -d $database -o $outputfile $auth_flag $trust_cert_flag
-
+if [ -n "$database" ]; then
+        IFS=',' read -r -a filtered_databases <<< "$database"
 else
-  echo "Mode should be either stats or full_metadata, found: $mode"
-  exit 1
+        excluded_databases=("master" "tempdb" "model" "msdb")
+        databases=$(sqlcmd -S $dbhost -U $username $password $auth_flag $trust_cert_flag -h -1 -Q "SELECT name FROM sys.databases WHERE state_desc='ONLINE'" | grep -v '^$' | grep -vE "\(([0-9]+) rows affected\)")
+        filtered_databases=()
+
+        while IFS= read -r database; do
+        database=$(echo "$database" | xargs)
+        if [[ ! " ${excluded_databases[@]} " =~ " $database " ]]; then
+                filtered_databases+=("$database")
+        fi
+        done <<< "$databases"
 fi
 
-
+for database in "${filtered_databases[@]}"; do
+      if [ "$mode" == "stats" ]; then
+           sqlcmd -S $dbhost -U $username $password  -i ./data_type_distribution.sql -i ./other_stats.sql -d $database $auth_flag $trust_cert_flag >> "$outputfile"
+      elif [ "$mode" == "full_metadata" ]; then
+           sqlcmd -S $dbhost -U $username $password -i ./queries.sql -d $database  $auth_flag $trust_cert_flag >> "$outputfile"
+      else
+           echo "Mode should be either stats or full_metadata, found: $mode"
+           exit 1
+      fi
+done
