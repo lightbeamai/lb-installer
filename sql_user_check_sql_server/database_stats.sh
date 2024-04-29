@@ -1,7 +1,6 @@
 #!/bin/bash
 
 mode="stats"
-port="1433"
 use_ad_auth=0
 trust_server_cert=0
 
@@ -15,9 +14,8 @@ do
         d) database=${OPTARG};;
         o) outputfile=${OPTARG};;
         m) mode=${OPTARG};;
-        p) port=${OPTARG};;
-	a) use_ad_auth=${OPTARG};;
-	t) trust_server_cert=${OPTARG};;
+        a) use_ad_auth=${OPTARG};;
+        t) trust_server_cert=${OPTARG};;
     esac
 done
 
