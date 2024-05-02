@@ -1,6 +1,6 @@
 SELECT
     name AS database_name,
-    size * 8 / 1024 AS database_size_mb
+    CAST(CAST(size AS BIGINT) * 8 / 1024 AS BIGINT) as database_size_mb
 FROM
     sys.master_files
 WHERE
