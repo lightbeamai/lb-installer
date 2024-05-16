@@ -65,3 +65,6 @@ sudo mv terraform /usr/local/bin
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
 sudo apt install -y python3-pip
+
+# Set the context
+kubectl config set-context --current --namespace lightbeam
