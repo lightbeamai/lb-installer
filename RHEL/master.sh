@@ -181,7 +181,7 @@ else
 fi
 
 mkdir -p /root/.kube
-sudo yes | cp -f /etc/kubernetes/admin.conf /root/.kube/config
+sudo yes | cp -i /etc/kubernetes/admin.conf /root/.kube/config
 sudo chown $(id -u):$(id -g) /root/.kube/config
 
 kubectl taint nodes --all node-role.kubernetes.io/master-
