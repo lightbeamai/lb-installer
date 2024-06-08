@@ -30,6 +30,8 @@ systemctl daemon-reload && systemctl restart docker
 else
   echo "Installing podman podman-docker iproute-tc"
   sudo yum install -y iproute-tc podman podman-docker vim
+  systemctl start podman
+  systemctl enable podman
 fi
 
 
@@ -64,10 +66,11 @@ sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
 systemctl status firewalld
 
-export VERSION=1.23
+export VERSION=1.28
 sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_8/devel:kubic:libcontainers:stable.repo
 sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/CentOS_8/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo
 sudo yum install cri-o -y
+systemctl start crio
 
 TIMEOUT=300
 SLEEP_INTERVAL=1
@@ -133,8 +136,8 @@ function serviceStatusCheck() {
       done
 }
 
-sudo systemctl enable --now cri-o
-sudo systemctl start cri-o
+sudo systemctl enable --now crio
+sudo systemctl start crio
 
 sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.access.redhat.com
 sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.redhat.io
@@ -151,17 +154,19 @@ docker:
          sigstore: https://registry.redhat.io/containers/sigstore
 EOF
 
-cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+cat <<EOF | tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+baseurl=https://pkgs.k8s.io/core:/stable:/v$VERSION/rpm/
 enabled=1
 gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+gpgkey=https://pkgs.k8s.io/core:/stable:/v$VERSION/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
 
-yum install -y kubelet-1.23.0-0.x86_64 kubeadm-1.23.0-0.x86_64 kubectl-1.23.0-0.x86_64
+dnf makecache
+dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"
@@ -194,6 +199,72 @@ helm version
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/bin/python
-sudo yum install python3-pip
+sudo dnf install -y python3-pip wget git
+
+# At times coredns isn't functioning after installing the networking plugins. So restart it.
+kubectl -n kube-system rollout restart deployment coredns
+
+cat <<'EOF' > /usr/local/bin/lightbeam.sh
+#!/usr/bin/env bash
+
+trap 'kill $(jobs -p)' EXIT
+
+/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 --kubeconfig /root/.kube/config &
+PID1=$!
+
+/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 443:443 --kubeconfig /root/.kube/config &
+PID2=$!
+
+/bin/systemd-notify --ready
+
+while true; do
+    FAIL=0
+
+    kill -0 $PID1
+    if [[ $? -ne 0 ]]; then FAIL=1; fi
+
+    kill -0 $PID2
+    if [[ $? -ne 0 ]]; then FAIL=1; fi
+
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+    echo "Lightbeam cluster health check: $status_code"
+    if [[ $? -ne 0 || $status_code -ne 200 ]]; then FAIL=1; fi
+
+    if [[ $FAIL -eq 0 ]]; then /bin/systemd-notify WATCHDOG=1; fi
+
+    sleep 1
+done
+EOF
+
+echo "Script /usr/local/bin/lightbeam.sh has been created."
+chmod ugo+x /usr/local/bin/lightbeam.sh
+
+cat <<EOF > /etc/systemd/system/lightbeam.service
+[Unit]
+Description=LightBeam Application
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+
+StartLimitIntervalSec=500
+StartLimitBurst=10000
+
+[Service]
+Type=notify
+Restart=always
+RestartSec=1
+TimeoutSec=5
+WatchdogSec=5
+ExecStart=/usr/local/bin/lightbeam.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "Systemd service file /etc/systemd/system/lightbeam.service has been created."
+
+# Reload systemd, enable and start the service
+systemctl daemon-reload
+systemctl enable lightbeam.service
+systemctl start lightbeam.service
 
 echo "Done! Ready to deploy LightBeam Cluster!!"
