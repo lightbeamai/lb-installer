@@ -131,7 +131,7 @@ systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet &
 serviceStatusCheck "kubelet.service" "False"
 
 # UFW firewall you can deactivate it with this command
-sudo ufw disable
+ufw disable
 
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
