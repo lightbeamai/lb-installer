@@ -47,6 +47,9 @@ POLICY_ENGINE_DEPLOY_NAME="lightbeam-policy-engine"
 POLICY_CONSUMER_DEPLOY_NAME="lightbeam-policy-consumer"
 DATASOURCE_STATS_AGGREGATOR_KAFKA_QUEUE="datasource-stats"
 ER_DEPLOY_NAME="lightbeam-entity-resolution"
+WORKFLOW_EXECUTOR="lb-workflow-executor"
+WORKFLOW_CONTROLLER="lb-argo-workflows-controller"
+WORKFLOW_SERVER="lb-argo-workflows-server"
 
 if [ -z ${NAMESPACE} ]; then
   NAMESPACE=$LB_DEFAULT_NAMESPACE
@@ -58,11 +61,13 @@ fi
 
 if [ ${STOP_SERVICES} ]; then
    CRONJOB_SUSPEND_ENABLED="true"
+   WORKFLOW_SUSPEND_ENABLED="true"
    REPLICAS="0"
 fi
 
 if [ ${START_SERVICES} ]; then
    CRONJOB_SUSPEND_ENABLED="false"
+   WORKFLOW_SUSPEND_ENABLED="false"
    REPLICAS="1"
 fi
 
@@ -80,4 +85,9 @@ for deploy in $(kubectl get deploy -o=jsonpath="{.items[*]['metadata.name']}" -n
     echo "Scaling up replicas of deployment $deploy to $REPLICAS"
     kubectl scale deploy "$deploy" -n $NAMESPACE --replicas=$REPLICAS
   fi
+done
+
+for wf in $(kubectl get workflows -n "$NAMESPACE" -o name); do
+  echo "Updating workflow $wf in namespace $NAMESPACE"
+  kubectl patch "$wf" -n "$NAMESPACE" --type='merge' -p '{"spec" : {"suspend" : '$WORKFLOW_SUSPEND_ENABLED' }}'
 done
