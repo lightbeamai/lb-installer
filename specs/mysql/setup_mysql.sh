@@ -13,11 +13,6 @@ STORAGE_CLASS_NAME=$2
 STORAGE_SIZE=$3
 NAMESPACE=$4
 DATABASE_DUMP_FILE_PATH=$5
-
-if [[ $DATABASE_DUMP_FILE_PATH != s3://* ]]
-then
-   DATABASE_DUMP_FILE_PATH=$(realpath $5)
-fi
 DATABASE_NAME=$6
 MYSQL_PASSWORD=$7
 NAME=$8
@@ -60,7 +55,7 @@ commonLabels:
   app: RELEASE_NAME
 namespace: NAMESPACE
 resources:
-  - ../mysql_setup
+  - ../base
   - mysql_secret.yaml
 patchesStrategicMerge:
   - pv-patch.yaml
@@ -144,11 +139,7 @@ do
 done
 
 pushd "$WORK_DIR"
-if [[ "$DATABASE_DUMP_FILE_PATH" == s3://* ]]; then
-  aws s3 cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
-else
-  cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
-fi
+cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
 if [[ "$DATABASE_DUMP_FILE_PATH" == *.gz ]]; then
   gzip -d dump.sql.gz
 else
