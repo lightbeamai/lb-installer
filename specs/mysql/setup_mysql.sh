@@ -12,7 +12,7 @@ ACTION=$1
 STORAGE_CLASS_NAME=$2
 STORAGE_SIZE=$3
 NAMESPACE=$4
-DATABASE_DUMP_FILE_PATH=$5
+DATABASE_DUMP_DIRECTORY_PATH=$5
 DATABASE_NAME=$6
 MYSQL_PASSWORD=$7
 NAME=$8
@@ -139,12 +139,12 @@ do
 done
 
 pushd "$WORK_DIR"
-cp "$DATABASE_DUMP_FILE_PATH" dump.sql.gz
-if [[ "$DATABASE_DUMP_FILE_PATH" == *.gz ]]; then
-  gzip -d dump.sql.gz
-else
-  mv dump.sql.gz dump.sql
-fi
+pushd "$WORK_DIR"
+pod_name=$(kubectl get pods -n "$NAMESPACE" -l app="$NAME" -o jsonpath='{.items[0].metadata.name}')
+for file in "$DATABASE_DUMP_DIRECTORY_PATH"/*.sql
+do
+  kubectl cp "$file" "$pod_name":/tmp/ -n "$NAMESPACE"
+done
 
 mysqlPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$mysqlPod":/tmp/ -n "$NAMESPACE"
