@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lb-mysql
+  labels:
+    app: lb-mysql
+spec:
+  selector:
+    matchLabels:
+      app: lb-mysql
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: lb-mysql
+    spec:
+      containers:
+      - name: lb-mysql
+        image: mysql:8.0
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - containerPort: 3306
+          name: lb-mysql
+        envFrom:
+          - secretRef:
+              name: lb-mysql-secret
+        env:
+        - name: MYSQL_USER
+          value: mysql
+        - name: MYSQLDATA
+          value: /var/lib/mysqldb/data/mysqldata
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 3306
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 3306
+        volumeMounts:
+        - mountPath: /var/lib/mysqldb/data
+          name: mysqldb
+      volumes:
+      - name: mysqldb
+        persistentVolumeClaim:
+          claimName: lb-mysql-data
