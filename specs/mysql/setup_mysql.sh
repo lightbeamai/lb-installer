@@ -139,7 +139,6 @@ do
 done
 
 pushd "$WORK_DIR"
-pushd "$WORK_DIR"
 pod_name=$(kubectl get pods -n "$NAMESPACE" -l app="$NAME" -o jsonpath='{.items[0].metadata.name}')
 for file in "$DATABASE_DUMP_DIRECTORY_PATH"/*.sql
 do
@@ -147,7 +146,7 @@ do
 done
 
 mysqlPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
-kubectl cp "$(ls *.sql)" "$mysqlPod":/tmp/ -n "$NAMESPACE"
+kubectl cp "$(ls $DATABASE_DUMP_DIRECTORY_PATH/*.sql)" "$mysqlPod":/tmp/ -n "$NAMESPACE"
 filesList=$(kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- ls tmp/)
 kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- mysql -u root -p"$MYSQL_PASSWORD" -e "$SQL_CREATE_DB_STMT"
 kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- mysql -u root -p"$MYSQL_PASSWORD" "$DATABASE_NAME" -e "source /tmp/$filesList"
