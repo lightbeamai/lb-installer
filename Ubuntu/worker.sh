@@ -58,6 +58,8 @@ sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
 systemctl status firewalld
 
+# Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
+# The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
 mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml > /dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
