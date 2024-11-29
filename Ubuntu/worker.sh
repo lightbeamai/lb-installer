@@ -57,8 +57,26 @@ setenforce 0
 sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
 systemctl status firewalld
-rm /etc/containerd/config.toml
+
+# Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
+# The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
+mkdir -p /etc/containerd
+containerd config default | tee /etc/containerd/config.toml > /dev/null
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 systemctl restart containerd
+
+# Load necessary kernel modules.
+modprobe overlay
+modprobe br_netfilter
+
+# Set required sysctl parameters.
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+sysctl --system
 
 export dotCount=0
 export maxDots=15
@@ -124,9 +142,9 @@ function serviceStatusCheck() {
 echo "2. Install kubeadm, kubectl and kubelet:"
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 mkdir -p /etc/apt/keyrings
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-apt-get update -y && apt-get install -y kubelet=1.28.8-1.1 kubeadm=1.28.8-1.1 kubectl=1.28.8-1.1
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+apt-get update -y && apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.6-1.1
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
