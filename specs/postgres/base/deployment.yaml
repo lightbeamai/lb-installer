@@ -22,11 +22,9 @@ spec:
       imagePullSecrets:
       - name: docregistry-secret
       securityContext:
-        allowPrivilegeEscalation: false
         runAsUser: 1001
         runAsGroup: 1001
         fsGroup: 1001
-        runAsNonRoot: true
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
@@ -55,8 +53,11 @@ spec:
           tcpSocket:
             port: 5432
         volumeMounts:
-        - mountPath: /var/lib/postgresql/data
-          name: postgredb
+          - mountPath: /var/lib/postgresql/data
+            name: lightbeam-postgresql
+            subPath: pgdata
+          - mountPath: /bitnami/postgresql/conf/conf.d
+            name: custom-postgres-conf
       volumes:
       - name: postgredb
         persistentVolumeClaim:
