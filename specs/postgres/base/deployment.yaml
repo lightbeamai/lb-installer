@@ -20,52 +20,39 @@ spec:
         app: lb-postgres
     spec:
       imagePullSecrets:
-        - name: docregistry-secret
-      securityContext:
-        runAsUser: 1001
-        fsGroup: 1001
+        - name: lb-postgres-secret
       containers:
-        - name: lb-postgres
-          image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
-          imagePullPolicy: "IfNotPresent"
-          ports:
-            - containerPort: 5432
-              name: lb-postgres
-          envFrom:
-            - secretRef:
-                name: lb-postgres-secret
-          env:
-            - name: POSTGRES_USER
-              value: postgres
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-            - name: POSTGRESQL_CUSTOM_CONFIG_FILE
-              value: /bitnami/postgresql/conf/custom-postgresql.conf
-          livenessProbe:
-            initialDelaySeconds: 5
-            periodSeconds: 15
-            failureThreshold: 3
-            tcpSocket:
-              port: 5432
-          readinessProbe:
-            initialDelaySeconds: 5
-            periodSeconds: 15
-            failureThreshold: 3
-            tcpSocket:
-              port: 5432
-          volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: postgredb
-            - mountPath: /bitnami/postgresql/conf/custom-postgresql.conf
-              subPath: custom-postgresql.conf
-              name: custom-postgres-conf
+      - name: lb-postgres
+        image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
+        imagePullPolicy: "IfNotPresent"
+        ports:
+        - containerPort: 5432
+          name: lb-postgres
+        envFrom:
+          - secretRef:
+              name: lb-postgres-secret
+        env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 5432
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          failureThreshold: 3
+          tcpSocket:
+            port: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgredb
       volumes:
-        - name: postgredb
-          persistentVolumeClaim:
-            claimName: lb-postgres-data
-        - name: custom-postgres-conf
-          configMap:
-            name: lb-postgresql-conf
-            items:
-              - key: custom-postgresql.conf
-                path: custom-postgresql.conf
+      - name: postgredb
+        persistentVolumeClaim:
+          claimName: lb-postgres-data
+
