@@ -19,6 +19,8 @@ spec:
       labels:
         app: lb-postgres
     spec:
+      imagePullSecrets:
+      - name: docregistry-secret
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
