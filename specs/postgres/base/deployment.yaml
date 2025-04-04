@@ -59,7 +59,12 @@ spec:
           - mountPath: /bitnami/postgresql/conf/conf.d
             name: custom-postgres-conf
       volumes:
-      - name: postgredb
+      - name: lightbeam-postgresql
         persistentVolumeClaim:
           claimName: lb-postgres-data
-
+      - name: custom-postgres-conf
+        configMap:
+          name: lb-postgresql-conf
+          items:
+            - key: custom-postgresql.conf
+              path: custom-postgresql.conf
