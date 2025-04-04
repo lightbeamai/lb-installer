@@ -20,51 +20,52 @@ spec:
         app: lb-postgres
     spec:
       imagePullSecrets:
-      - name: docregistry-secret
+        - name: docregistry-secret
       securityContext:
         runAsUser: 1001
-        runAsGroup: 1001
         fsGroup: 1001
       containers:
-      - name: lb-postgres
-        image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
-        imagePullPolicy: "IfNotPresent"
-        ports:
-        - containerPort: 5432
-          name: lb-postgres
-        envFrom:
-          - secretRef:
-              name: lb-postgres-secret
-        env:
-        - name: POSTGRES_USER
-          value: postgres
-        - name: PGDATA
-          value: /var/lib/postgresql/data/pgdata
-        livenessProbe:
-          initialDelaySeconds: 5
-          periodSeconds: 15
-          failureThreshold: 3
-          tcpSocket:
-            port: 5432
-        readinessProbe:
-          initialDelaySeconds: 5
-          periodSeconds: 15
-          failureThreshold: 3
-          tcpSocket:
-            port: 5432
-        volumeMounts:
-          - mountPath: /var/lib/postgresql/data
-            name: lightbeam-postgresql
-            subPath: pgdata
-          - mountPath: /bitnami/postgresql/conf/conf.d
-            name: custom-postgres-conf
+        - name: lb-postgres
+          image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+              name: lb-postgres
+          envFrom:
+            - secretRef:
+                name: lb-postgres-secret
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRESQL_CUSTOM_CONFIG_FILE
+              value: /bitnami/postgresql/conf/custom-postgresql.conf
+          livenessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+            tcpSocket:
+              port: 5432
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+            tcpSocket:
+              port: 5432
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+            - mountPath: /bitnami/postgresql/conf/custom-postgresql.conf
+              subPath: custom-postgresql.conf
+              name: custom-postgres-conf
       volumes:
-      - name: lightbeam-postgresql
-        persistentVolumeClaim:
-          claimName: lb-postgres-data
-      - name: custom-postgres-conf
-        configMap:
-          name: lb-postgresql-conf
-          items:
-            - key: custom-postgresql.conf
-              path: custom-postgresql.conf
+        - name: postgredb
+          persistentVolumeClaim:
+            claimName: lb-postgres-data
+        - name: custom-postgres-conf
+          configMap:
+            name: lb-postgresql-conf
+            items:
+              - key: custom-postgresql.conf
+                path: custom-postgresql.conf
