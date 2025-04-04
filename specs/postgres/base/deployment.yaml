@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: lb-postgres
-        image: docker.io/fastcomply/bitnami-postgresql:13-debian-11-hll
+        image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
         imagePullPolicy: "IfNotPresent"
         ports:
         - containerPort: 5432
