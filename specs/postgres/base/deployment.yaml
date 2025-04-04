@@ -21,6 +21,10 @@ spec:
     spec:
       imagePullSecrets:
       - name: docregistry-secret
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
