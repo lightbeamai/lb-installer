@@ -19,9 +19,14 @@ spec:
       labels:
         app: lb-postgres
     spec:
+      imagePullSecrets:
+        - name: docregistry-secret
+      securityContext:
+        runAsUser: 1001
+        fsGroup: 0
       containers:
       - name: lb-postgres
-        image: docker.io/fastcomply/bitnami-postgresql:13-debian-11
+        image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
         imagePullPolicy: "IfNotPresent"
         ports:
         - containerPort: 5432
@@ -34,6 +39,8 @@ spec:
           value: postgres
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRESQL_VOLUME_DIR
+          value: /bitnami/postgresql
         livenessProbe:
           initialDelaySeconds: 5
           periodSeconds: 15

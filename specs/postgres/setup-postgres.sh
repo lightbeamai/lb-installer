@@ -17,7 +17,7 @@ fi
 DATABASE_NAME=$6
 POSTGRES_PASSWORD=$7
 NAME=$8
-SQL_CREATE_DB_STMT="CREATE DATABASE $DATABASE_NAME;"
+SQL_CREATE_DB_STMT="CREATE DATABASE \"$DATABASE_NAME\";"
 
 mkdir -p overlays
 
@@ -94,7 +94,7 @@ sed -i "s/STORAGE_SIZE/$STORAGE_SIZE/g" overlays/pv-patch.yaml
 sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/kustomization.yaml
 sed -i "s/RELEASE_NAME/$NAME/g" overlays/kustomization.yaml
 sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/pg_secret.yaml
-pgPassword=$(echo "$POSTGRES_PASSWORD" | base64)
+pgPassword=$(echo -n "$POSTGRES_PASSWORD" | base64)
 sed -i "s/PG_PASSWORD/$pgPassword/g" overlays/pg_secret.yaml
 kubectl create ns "$NAMESPACE" || true
 kubectl kustomize overlays/
@@ -149,6 +149,10 @@ fi
 
 pgPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$pgPod":/tmp/ -n "$NAMESPACE"
-filesList=$(kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- ls /tmp/)
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- psql --username postgres -c "$SQL_CREATE_DB_STMT"
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
+filesList=$(kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- bash -c "ls /tmp/*.sql")
+kubectl exec -it -n abhishek deploy/"$NAME" -- \
+  env PGPASSWORD="$POSTGRES_PASSWORD" \
+  psql --username postgres -c "$SQL_CREATE_DB_STMT"
+kubectl exec -it -n abhishek deploy/"$NAME" -- \
+  env PGPASSWORD="$POSTGRES_PASSWORD" \
+  psql --username postgres -d "$DATABASE_NAME" -f "$filesList"
