@@ -21,10 +21,21 @@ spec:
     spec:
       imagePullSecrets:
         - name: lb-postgres-secret
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
         imagePullPolicy: "IfNotPresent"
+        command:
+          - "postgres"
+          - "-c"
+          - "shared_preload_libraries=pgaudit"
+          - "-c"
+          - "pgaudit.log=all"
+          - "-c"
+          - "log_statement=all"
         ports:
         - containerPort: 5432
           name: lb-postgres
