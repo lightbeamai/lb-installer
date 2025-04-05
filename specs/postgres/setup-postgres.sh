@@ -155,4 +155,4 @@ kubectl exec -it -n abhishek deploy/schema-67efe60070e1d27579debdbd -- \
   psql --username postgres -c "$SQL_CREATE_DB_STMT"
 kubectl exec -it -n abhishek deploy/schema-67efe60070e1d27579debdbd -- \
   env PGPASSWORD="$POSTGRES_PASSWORD" \
-  psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
+  psql --username postgres -d "$DATABASE_NAME" -f "$filesList"
