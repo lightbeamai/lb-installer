@@ -24,13 +24,13 @@ spec:
       securityContext:
         runAsUser: 1001
         fsGroup: 0
-#      initContainers:
-#        - name: init-pgdata
-#          image: busybox
-#          command: ['sh', '-c', 'mkdir -p /var/lib/postgresql/data/pgdata && chown -R 1001:0 /var/lib/postgresql/data']
-#          volumeMounts:
-#            - name: postgredb
-#              mountPath: /var/lib/postgresql/data
+      initContainers:
+        - name: init-pgdata
+          image: busybox
+          command: ['sh', '-c', 'mkdir -p /var/lib/postgresql/data/pgdata && chown -R 1001:0 /var/lib/postgresql/data/pgdata']
+          volumeMounts:
+            - name: postgredb
+              mountPath: /var/lib/postgresql/data
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
