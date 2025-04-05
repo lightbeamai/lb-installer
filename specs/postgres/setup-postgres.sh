@@ -150,5 +150,5 @@ fi
 pgPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$pgPod":/tmp/ -n "$NAMESPACE"
 filesList=$(kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- ls /tmp/)
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- psql --username postgres -c "$SQL_CREATE_DB_STMT"
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
+kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- env PGPASSWORD="$POSTGRES_PASSWORD" psql --username postgres -c "$SQL_CREATE_DB_STMT"
+kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- env PGPASSWORD="$POSTGRES_PASSWORD" psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
