@@ -94,7 +94,7 @@ sed -i "s/STORAGE_SIZE/$STORAGE_SIZE/g" overlays/pv-patch.yaml
 sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/kustomization.yaml
 sed -i "s/RELEASE_NAME/$NAME/g" overlays/kustomization.yaml
 sed -i "s/NAMESPACE/$NAMESPACE/g" overlays/pg_secret.yaml
-pgPassword=$(echo "$POSTGRES_PASSWORD" | base64)
+pgPassword=$(echo -n "$POSTGRES_PASSWORD" | base64)
 sed -i "s/PG_PASSWORD/$pgPassword/g" overlays/pg_secret.yaml
 kubectl create ns "$NAMESPACE" || true
 kubectl kustomize overlays/
