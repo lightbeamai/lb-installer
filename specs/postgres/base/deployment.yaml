@@ -20,7 +20,7 @@ spec:
         app: lb-postgres
     spec:
       imagePullSecrets:
-        - name: lb-postgres-secret
+        - name: docregistry-secret
       securityContext:
         runAsUser: 1001
         fsGroup: 0
