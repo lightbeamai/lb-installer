@@ -148,7 +148,7 @@ else
 fi
 
 echo "postgres password is $POSTGRES_PASSWORD"
-password=$(kubectl get secret lb-postgres-secret -n "$NAMESPACE" -o jsonpath="{.data.POSTGRES_PASSWORD}" | base64 --decode)
+password=$(echo "$POSTGRES_PASSWORD" | base64 --decode)
 echo "postgres password is $password"
 
 pgPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
