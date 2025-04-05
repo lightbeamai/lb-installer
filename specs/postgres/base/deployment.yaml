@@ -29,15 +29,14 @@ spec:
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
         imagePullPolicy: "IfNotPresent"
         command:
-          command:
-            - /bin/bash
-            - -c
-            - |
-              if [ ! -s "$PGDATA/PG_VERSION" ]; then
-                echo "Initializing database at $PGDATA"
-                initdb -D "$PGDATA"
-              fi
-              exec postgres -c shared_preload_libraries=pgaudit -c pgaudit.log=all -c log_statement=all
+          - /bin/bash
+          - -c
+          - |
+            if [ ! -s "$PGDATA/PG_VERSION" ]; then
+              echo "Initializing database at $PGDATA"
+              initdb -D "$PGDATA"
+            fi
+            exec postgres -c shared_preload_libraries=pgaudit -c pgaudit.log=all -c log_statement=all
         ports:
         - containerPort: 5432
           name: lb-postgres
