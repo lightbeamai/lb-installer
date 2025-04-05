@@ -147,12 +147,10 @@ else
   mv dump.sql.gz dump.sql
 fi
 
-echo "postgres password is $POSTGRES_PASSWORD"
-password=$(echo "$POSTGRES_PASSWORD" | base64 --decode)
-echo "postgres password is $password"
-
 pgPod=$(kubectl get pods -l app="$NAME" -n "$NAMESPACE" -o 'jsonpath={.items[0].metadata.name}')
 kubectl cp "$(ls *.sql)" "$pgPod":/tmp/ -n "$NAMESPACE"
 filesList=$(kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- ls /tmp/)
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- env "$password" psql --username postgres -c "$SQL_CREATE_DB_STMT"
-kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- env "$password" psql --username postgres -d "$DATABASE_NAME" -f /tmp/"$filesList"
+kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- \
+  bash -c "PGPASSWORD=\"$POSTGRES_PASSWORD\" psql --username postgres -c \"$SQL_CREATE_DB_STMT\""
+kubectl exec -n "$NAMESPACE" deploy/"$NAME" -- \
+  bash -c "PGPASSWORD=\"$POSTGRES_PASSWORD\" psql --username postgres -d \"$DATABASE_NAME\" -f /tmp/$filesList"
