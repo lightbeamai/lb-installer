@@ -22,24 +22,27 @@ spec:
       imagePullSecrets:
         - name: lb-postgres-secret
       securityContext:
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 0
+      initContainers:
+        - name: init-pgdata
+          image: busybox
+          command: ['sh', '-c', 'mkdir -p /var/lib/postgresql/data/pgdata && chown -R 1001:0 /var/lib/postgresql/data']
+          volumeMounts:
+            - name: postgredb
+              mountPath: /var/lib/postgresql/data
       containers:
       - name: lb-postgres
         image: docker.io/fastcomply/lb-postgresql:13-debian-11-hll
         imagePullPolicy: "IfNotPresent"
-        command:
-          - /bin/bash
-          - -c
+        command: ["/bin/bash", "-c"]
+        args:
           - |
             if [ ! -s "$PGDATA/PG_VERSION" ]; then
               echo "Initializing database at $PGDATA"
               initdb -D "$PGDATA"
             fi
             exec postgres -c shared_preload_libraries=pgaudit -c pgaudit.log=all -c log_statement=all
-        ports:
-        - containerPort: 5432
-          name: lb-postgres
         envFrom:
           - secretRef:
               name: lb-postgres-secret
@@ -48,6 +51,9 @@ spec:
           value: postgres
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+          name: lb-postgres
         livenessProbe:
           initialDelaySeconds: 5
           periodSeconds: 15
@@ -63,6 +69,7 @@ spec:
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: postgredb
+          subPath: pgdata
       volumes:
       - name: postgredb
         persistentVolumeClaim:
