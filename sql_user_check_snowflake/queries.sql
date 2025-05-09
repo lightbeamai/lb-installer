@@ -43,7 +43,7 @@ SELECT
         AND cols.table_name = constraints.table_name
         AND cols.column_name = constraints.column_name
     WHERE
-        cols.table_schema NOT in('INFORMATION_SCHEMA')) AS c
+        cols.table_schema NOT in('INFORMATION_SCHEMA') AND t.TABLE_TYPE = 'BASE TABLE' ) AS c
         LEFT JOIN LB_DATABASE_NAME.INFORMATION_SCHEMA.TABLES t ON c.TABLE_NAME = t.TABLE_NAME
             AND c.TABLE_SCHEMA = t.TABLE_SCHEMA
         ORDER BY
