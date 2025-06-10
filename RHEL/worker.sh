@@ -152,3 +152,6 @@ EOF
 sudo dnf install -y kubelet-1.32.0 kubeadm-1.32.0 kubectl-1.32.0 --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet
+
+# Mark packages on hold to avoid an auto upgrade.
+sudo dnf mark install kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin

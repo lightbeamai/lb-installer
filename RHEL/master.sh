@@ -257,3 +257,6 @@ systemctl start lightbeam.service
 # Set default namespace as lightbeam
 kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
+
+# Mark packages on hold to avoid an auto upgrade.
+sudo dnf mark install kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
