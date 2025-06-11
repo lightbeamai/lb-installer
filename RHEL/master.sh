@@ -192,7 +192,7 @@ while true
   done
 
 # Setup python3.
-sudo cp /usr/local/bin/python3 /usr/local/bin/python
+sudo cp /usr/bin/python3 /usr/local/bin/python
 sudo dnf install -y python3-pip wget git
 
 cat <<'EOF' > /usr/local/bin/lightbeam.sh
