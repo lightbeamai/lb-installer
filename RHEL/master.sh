@@ -5,6 +5,11 @@ if [ "$EUID" -ne 0 ]; then
   exit
 fi
 
+sudo yum update -y
+
+grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
 echo "Installing docker"
 sudo dnf config-manager --add-repo=https://download.docker.com/linux/rhel/docker-ce.repo
 sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -136,7 +141,6 @@ function serviceStatusCheck() {
 }
 
 dnf makecache
-dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 
 echo "Installing kubeadm, kubectl and kubelet:"
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
@@ -188,18 +192,18 @@ while true
   done
 
 # Setup python3.
-sudo cp /usr/bin/python3 /usr/bin/python
+sudo cp /usr/local/bin/python3 /usr/local/bin/python
 sudo dnf install -y python3-pip wget git
 
 cat <<'EOF' > /usr/local/bin/lightbeam.sh
-#!/usr/bin/env bash
+#!/usr/local/bin/env bash
 
 trap 'kill $(jobs -p)' EXIT
 
-/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 --kubeconfig /root/.kube/config &
+/usr/local/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 --kubeconfig /root/.kube/config &
 PID1=$!
 
-/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 443:443 --kubeconfig /root/.kube/config &
+/usr/local/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 443:443 --kubeconfig /root/.kube/config &
 PID2=$!
 
 /bin/systemd-notify --ready
