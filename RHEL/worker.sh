@@ -1,37 +1,49 @@
 #!/usr/bin/env bash
 
-while getopts d:p: flag
-do
-    case "${flag}" in
-        d) install_docker=${OPTARG};;
-        p) docker_diskpath=${OPTARG};;
-    esac
-done
-: ${install_docker:="false"}
-: ${docker_diskpath:="/var/lib/docker"}
-echo "install_docker: $install_docker";
-echo "docker_diskpath: $docker_diskpath";
-
-if [ $install_docker = "true" ]; then
-        echo 'Installing docker..'
-        sudo dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
-        sudo dnf install --nobest -y docker-ce
-        sudo systemctl enable --now docker
-        systemctl is-active docker
-        systemctl is-enabled docker
-  if [ $docker_diskpath != "/var/lib/docker" ]; then
-cat <<EOF | sudo tee /etc/docker/daemon.json
-{
-  "data-root": "$docker_diskpath"
-}
-EOF
-systemctl daemon-reload && systemctl restart docker
-  fi
-else
-  echo "Installing podman podman-docker iproute-tc"
-  sudo yum install -y iproute-tc podman podman-docker vim
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root."
+  exit
 fi
 
+sudo yum update -y
+
+grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+echo "Installing docker"
+sudo dnf config-manager --add-repo=https://download.docker.com/linux/rhel/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo systemctl start docker
+
+# The Container runtimes explains that the systemd driver is recommended for kubeadm based setups instead of the
+# kubelet's default cgroupfs driver, because kubeadm manages the kubelet as a systemd service.
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+systemctl restart docker
+sleep 10
+cgroupdriver_status=`docker info | grep -i "Cgroup Driver"  | grep systemd  | wc -l`
+if [ $cgroupdriver_status == 1 ]; then
+   echo "Docker cgroup driver is updated to systemd"
+else
+   echo "Failed to update docker cgroup driver is updated to systemd"
+   exit 1
+fi
+
+echo "Installing containerd"
+sudo yum install containerd vim -y
+sudo systemctl enable containerd
+sudo systemctl start containerd
+# Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
+# The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
+mkdir -p /etc/containerd
+containerd config default | tee /etc/containerd/config.toml > /dev/null
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+systemctl restart containerd
 
 # Create the .conf file to load the modules at bootup
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
@@ -63,11 +75,6 @@ sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable firewalld
 systemctl status firewalld
-
-export VERSION=1.28
-sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_8/devel:kubic:libcontainers:stable.repo
-sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/CentOS_8/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo
-sudo yum install cri-o -y
 
 TIMEOUT=300
 SLEEP_INTERVAL=1
@@ -133,35 +140,22 @@ function serviceStatusCheck() {
       done
 }
 
-sudo systemctl enable --now crio
-sudo systemctl start crio
+dnf makecache
 
-sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.access.redhat.com
-sudo podman image trust set -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.redhat.io
-
-cat <<EOF > /etc/containers/registries.d/registry.access.redhat.com.yaml
-docker:
-     registry.access.redhat.com:
-         sigstore: https://access.redhat.com/webassets/docker/content/sigstore
-EOF
-
-cat <<EOF > /etc/containers/registries.d/registry.redhat.io.yaml
-docker:
-     registry.redhat.io:
-         sigstore: https://registry.redhat.io/containers/sigstore
-EOF
-
-cat <<EOF | tee /etc/yum.repos.d/kubernetes.repo
+echo "Installing kubeadm, kubectl and kubelet:"
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v$VERSION/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/
 enabled=1
 gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v$VERSION/rpm/repodata/repomd.xml.key
+repo_gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-
-dnf makecache
-dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+sudo dnf install -y kubelet-1.32.0 kubeadm-1.32.0 kubectl-1.32.0 --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet
+
+# Mark packages on hold to avoid an auto upgrade.
+sudo dnf mark install kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
