@@ -49,7 +49,14 @@ else
    echo "Failed to update docker cgroup driver is updated to systemd"
    exit 1
 fi
-
+# Set up monthly Docker prune cron job (runs at 3 AM on the 1st of every month)
+echo "Setting up Docker prune cron job..."
+if ! crontab -l 2>/dev/null | grep -q "docker system prune"; then
+  (crontab -l 2>/dev/null; echo "0 3 1 * * /usr/bin/docker system prune -af > /var/log/docker_prune.log 2>&1") | crontab -
+  echo "Docker prune cron job added."
+else
+  echo "Docker prune cron job already exists. Skipping."
+fi
 # Disable Swap Permanently.
 swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
