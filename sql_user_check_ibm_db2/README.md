@@ -1,14 +1,14 @@
 # check user permissions for IBM DB2 
 
-Prerequisites:
-# - Install [ibm_db2 cli](https://github.com/ibmdb/db2drivers/tree/main/clidriver) on the machine.
+### Prerequisites:
+Install [ibm_db2 cli](https://github.com/ibmdb/db2drivers/tree/main/clidriver) on the machine.
 
 Validate database
 ```shell
 db2cli validate -database "<DATABASE_NAME>:<HOST>:<PORT>" -connect -user <USERNAME> -passwd <PASSWORD>
 ```
 
-# DB2CLI User Check
+# DB2CLI User Permision Check
 database_stats.sh script can be used to test connectivity with DB@ database as well as fetch some stats and metadata. 
 The script supports 2 modes which can be specified with -m flag while running the script. One mode is stats mode which 
 will just print info like list of schemas with their size. Count of tables, rows, column, size per schema. 
