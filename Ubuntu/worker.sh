@@ -148,6 +148,9 @@ apt-get update -y && apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 ku
 systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
 serviceStatusCheck "kubelet.service" "False"
 
+# UFW firewall you can deactivate it with this command
+ufw disable
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl

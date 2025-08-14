@@ -191,6 +191,9 @@ while true
 cp /usr/bin/python3 /usr/bin/python
 apt install python3-pip -y 
 
+# UFW firewall you can deactivate it with this command
+ufw disable
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl
