@@ -208,4 +208,9 @@ apt-mark hold systemd-timesyncd
 
 # set default namespace as lightbeam
 kubectl config set-context --current --namespace lightbeam
+
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw allow 22
+
 echo "Done! Ready to deploy LightBeam Cluster!!"
