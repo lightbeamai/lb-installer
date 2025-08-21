@@ -189,7 +189,7 @@ while true
 
 # Setup python3.
 cp /usr/bin/python3 /usr/bin/python
-apt install python3-pip -y 
+apt install python3-pip python3-virtualenv -y 
 
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
