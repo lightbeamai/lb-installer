@@ -191,6 +191,9 @@ while true
 cp /usr/bin/python3 /usr/bin/python
 apt install python3-pip -y 
 
+# Setup virtualenv.
+apt install python3-virtualenv -y
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl
