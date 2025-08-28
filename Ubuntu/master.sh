@@ -209,3 +209,11 @@ apt-mark hold systemd-timesyncd
 # set default namespace as lightbeam
 kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
+
+# Linux Command History with date and time
+echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bash_profile
+source ~/.bash_profile
+
+# set common alias
+echo "alias k=kubectl" >> ~/.bashrc
+source ~/.bashrc
