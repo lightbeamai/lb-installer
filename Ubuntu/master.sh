@@ -162,7 +162,29 @@ curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-
 helm version
 
 echo "4. Initialize kubernetes cluster:"
-kubeadm init --pod-network-cidr=192.168.0.0/16
+# Create the kubeadm config file with hardened security settings
+cat <<EOF > kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    cgroup-driver: "systemd"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: "v1.30.0"
+networking:
+  serviceSubnet: "10.200.0.0/16"
+podSubnet: "192.168.0.0/16"
+apiServer:
+  extraArgs:
+    tls-cipher-suites: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY135,TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256,TLS_CHACHA20_POLY1305_SHA256"
+etcd:
+  local:
+    extraArgs:
+      cipher-suites: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+EOF
+kubeadm init --config kubeadm-config.yaml 
 rm -rf $HOME/.kube
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
@@ -212,8 +234,6 @@ echo "Done! Ready to deploy LightBeam Cluster!!"
 
 # Linux Command History with date and time
 echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bash_profile
-source ~/.bash_profile
 
 # set common alias
 echo "alias k=kubectl" >> ~/.bashrc
-source ~/.bashrc
