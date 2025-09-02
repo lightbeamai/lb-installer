@@ -11,13 +11,20 @@ SLEEP_INTERVAL=1
 # Remove all older packages.
 apt-get -y remove docker docker-engine docker.io containerd runc kubeadm kubelet kubectl
 
+# Clean up any existing Kubernetes repositories
+rm -f /etc/apt/sources.list.d/kubernetes.list
+rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
 # Install docker.
 apt-get update -y
 apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common openssh-server apt-transport-https curl
 
+# Create keyrings directory
+mkdir -p /etc/apt/keyrings
+
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 
-add-apt-repository \
+add-apt-repository -y \
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
@@ -234,7 +241,7 @@ kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
 
 # Linux Command History with date and time
-echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bash_profile
+echo 'HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bashrc
 
 # set common alias
 echo "alias k=kubectl" >> ~/.bashrc
