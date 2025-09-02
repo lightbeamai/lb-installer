@@ -13,11 +13,11 @@ apt-get -y remove docker docker-engine docker.io containerd runc kubeadm kubelet
 
 # Install docker.
 apt-get update -y
-apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common openssh-server apt-transport-https curl
+apt-get install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common openssh-server
 
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
 
-add-apt-repository \
+add-apt-repository -y \
    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
    $(lsb_release -cs) \
    stable"
@@ -49,6 +49,7 @@ else
    echo "Failed to update docker cgroup driver is updated to systemd"
    exit 1
 fi
+
 # Set up monthly Docker prune cron job (runs at 3 AM on the 1st of every month)
 echo "Setting up Docker prune cron job..."
 if ! crontab -l 2>/dev/null | grep -q "docker system prune"; then
@@ -57,15 +58,24 @@ if ! crontab -l 2>/dev/null | grep -q "docker system prune"; then
 else
   echo "Docker prune cron job already exists. Skipping."
 fi
+
 # Disable Swap Permanently.
 swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
 systemctl mask swap.target               # Completely disabled.
 
-setenforce 0
-sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-systemctl disable firewalld
-systemctl status firewalld
+# SELinux is not default on Ubuntu, but disable if present
+if command -v setenforce >/dev/null 2>&1; then
+    setenforce 0
+    sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+fi
+
+# Ubuntu uses ufw, not firewalld by default
+if systemctl is-enabled ufw >/dev/null 2>&1; then
+    ufw disable
+else
+    echo "UFW not enabled, skipping firewall disable"
+fi
 
 # Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
 # The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
@@ -78,8 +88,14 @@ systemctl restart containerd
 modprobe overlay
 modprobe br_netfilter
 
+# Make kernel modules persistent
+cat <<EOF > /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
 # Set required sysctl parameters.
-cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+cat <<EOF > /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
@@ -128,7 +144,8 @@ function serviceStatusCheck() {
       do
         service=$1
         exit_required=$2
-        DOCKER_SERVICE_STATUS="$(systemctl is-active $service)"
+        # Strip ANSI escape sequences and get clean output
+        DOCKER_SERVICE_STATUS="$(systemctl is-active $service 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r')"
         if [ "${DOCKER_SERVICE_STATUS}" = "active" ]; then
           echo ""
           echo "$service running.."
@@ -144,36 +161,98 @@ function serviceStatusCheck() {
           if [ "${exit_required}" = "True" ]; then
             exit 1
           fi
+          break
         fi
       done
 }
 
 echo "2. Install kubeadm, kubectl and kubelet:"
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+# Complete cleanup first
+rm -f /etc/apt/sources.list.d/kubernetes.list
+rm -rf /etc/apt/keyrings
+apt-get clean
+
+# Install required packages
+apt-get update -y
+apt-get install -y apt-transport-https ca-certificates curl gpg
+
+# Create keyrings directory
 mkdir -p /etc/apt/keyrings
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-apt-get update -y && apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.6-1.1
-systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
-serviceStatusCheck "kubelet.service" "False"
+
+# Download Kubernetes signing key (method that avoids control characters)
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key -o /tmp/k8s-key.gpg
+gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/k8s-key.gpg
+rm -f /tmp/k8s-key.gpg
+
+# Create repository file manually (avoids echo/tee control character issues)
+cat > /etc/apt/sources.list.d/kubernetes.list << 'REPO_EOF'
+deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+REPO_EOF
+
+# Update package index
+apt-get update -y
+
+# Install Kubernetes components with specific versions
+apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.6-1.1
+
+# Enable and start kubelet
+systemctl daemon-reload
+systemctl enable kubelet
+systemctl start kubelet
+
+# Check kubelet status (it's normal for kubelet to be in crash loop before cluster init)
+echo "Note: kubelet may show as failed until cluster is initialized - this is normal"
+systemctl status kubelet --no-pager -l
 
 echo "3. Setup helm"
-curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.13.1-linux-amd64.tar.gz
+curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm -rf helm-v3.13.1-linux-amd64.tar.gz linux-amd64
 helm version
 
 echo "4. Initialize kubernetes cluster:"
-kubeadm init --pod-network-cidr=192.168.0.0/16
+# Create the kubeadm config file with hardened security settings
+cat <<EOF > kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    cgroup-driver: "systemd"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: "v1.30.0"
+networking:
+  serviceSubnet: "10.200.0.0/16"
+  podSubnet: "192.168.0.0/16"
+apiServer:
+  extraArgs:
+    tls-min-version: "VersionTLS12"
+    tls-cipher-suites: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256,TLS_CHACHA20_POLY1305_SHA256"
+etcd:
+  local:
+    extraArgs:
+      cipher-suites: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+EOF
+
+kubeadm init --config kubeadm-config.yaml 
+
+# Setup kubectl for root user
 rm -rf $HOME/.kube
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
+# Use the latest Calico version compatible with Kubernetes 1.30
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
+# Wait for nodes to be ready
+timecheck=0
 while true
   do
-    readyNodeCount=$(kubectl get nodes | grep "Ready" | awk '$2' | wc -l)
+    readyNodeCount=$(kubectl get nodes --no-headers 2>/dev/null | grep -c "Ready" || echo "0")
     if [[ "$readyNodeCount" -ge 1 ]] ; then
+      echo ""
       echo "Nodes are ready."
+      kubectl get nodes
       break
     fi
     showMessage "Checking node status"
@@ -183,12 +262,15 @@ while true
       echo ""
       echo "ERROR: Nodes are not ready.. Timeout error."
       echo ""
+      kubectl get nodes
       exit 1
     fi
   done
 
-# Setup python3.
-cp /usr/bin/python3 /usr/bin/python
+# Setup python3 - Ubuntu 24.04 may not have python3 symlinked to python
+if [ ! -f /usr/bin/python ]; then
+    ln -s /usr/bin/python3 /usr/bin/python
+fi
 apt install python3-pip python3-virtualenv -y 
 
 # Mark packages on hold to avoid an auto upgrade.
@@ -198,7 +280,7 @@ apt-mark hold kubeadm
 apt-mark hold containerd.io
 apt-mark hold docker-buildx-plugin
 apt-mark hold docker-ce
-apt-mark hold docker-cli
+apt-mark hold docker-ce-cli
 apt-mark hold docker-ce-rootless-extras
 apt-mark hold docker-compose-plugin
 apt-mark hold snapd
@@ -206,6 +288,29 @@ apt-mark hold systemd
 apt-mark hold systemd-sysv
 apt-mark hold systemd-timesyncd
 
-# set default namespace as lightbeam
-kubectl config set-context --current --namespace lightbeam
+# Create lightbeam namespace if it doesn't exist
+kubectl create namespace lightbeam --dry-run=client -o yaml | kubectl apply -f -
+
+# Set default namespace as lightbeam
+kubectl config set-context --current --namespace=lightbeam
+
 echo "Done! Ready to deploy LightBeam Cluster!!"
+
+# Linux Command History with date and time and common aliases
+echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bashrc
+echo 'export HISTSIZE=10000' >> ~/.bashrc          # Keep 10,000 commands in memory
+echo 'export HISTFILESIZE=10000' >> ~/.bashrc      # Keep 10,000 commands in history file
+echo 'export HISTCONTROL=ignoreboth' >> ~/.bashrc  # Ignore duplicates and commands starting with space
+echo 'shopt -s histappend' >> ~/.bashrc            # Append to history file, don't overwrite
+echo "alias k=kubectl" >> ~/.bashrc
+
+# Display cluster info
+echo ""
+echo "=== Cluster Information ==="
+kubectl cluster-info
+echo ""
+echo "=== Node Status ==="
+kubectl get nodes -o wide
+echo ""
+echo "=== System Pods ==="
+kubectl get pods -n kube-system
