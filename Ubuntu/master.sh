@@ -314,3 +314,38 @@ kubectl get nodes -o wide
 echo ""
 echo "=== System Pods ==="
 kubectl get pods -n kube-system
+kubectl config set-context --current --namespace=lightbeam
+
+# --- KUBECTL AUTOCOMPLETE SETUP ---
+
+# Ensure bash-completion is available
+if ! type _init_completion >/dev/null 2>&1; then
+    # Try to install if system is Debian/Ubuntu
+    if [ -f /etc/debian_version ]; then
+        echo "Installing bash-completion..."
+        sudo apt-get update -y
+        sudo apt-get install -y bash-completion
+    else
+        echo "bash-completion not installed and cannot auto-install."
+    fi
+fi
+
+# Load bash-completion if present
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+elif [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+fi
+
+# Enable kubectl autocompletion
+if command -v kubectl >/dev/null 2>&1; then
+    source <(kubectl completion bash)
+else
+    echo "kubectl not found in PATH. Autocomplete not enabled."
+fi
+
+# Optional: Add 'k' alias
+alias k=kubectl
+complete -o default -F __start_kubectl k
+
+# --- END AUTOCOMPLETE SETUP ---
