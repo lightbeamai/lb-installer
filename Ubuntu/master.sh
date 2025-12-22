@@ -273,6 +273,120 @@ if [ ! -f /usr/bin/python ]; then
 fi
 apt install python3-pip python3-virtualenv -y 
 
+# Create lightbeam namespace if it doesn't exist
+kubectl create namespace lightbeam --dry-run=client -o yaml | kubectl apply -f -
+
+# Set default namespace as lightbeam
+kubectl config set-context --current --namespace=lightbeam
+
+echo "Done! Ready to deploy LightBeam Cluster!!"
+
+# Linux Command History with date and time and common aliases
+grep -qxF 'export HISTTIMEFORMAT="%d/%m/%y %T "' ~/.bashrc || echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bashrc
+grep -qxF 'export HISTSIZE=10000' ~/.bashrc || echo 'export HISTSIZE=10000' >> ~/.bashrc
+grep -qxF 'export HISTFILESIZE=10000' ~/.bashrc || echo 'export HISTFILESIZE=10000' >> ~/.bashrc
+grep -qxF 'export HISTCONTROL=ignoreboth' ~/.bashrc || echo 'export HISTCONTROL=ignoreboth' >> ~/.bashrc
+grep -qxF 'shopt -s histappend' ~/.bashrc || echo 'shopt -s histappend' >> ~/.bashrc
+grep -qxF 'alias k=kubectl' ~/.bashrc || echo 'alias k=kubectl' >> ~/.bashrc
+
+# Display cluster info
+echo ""
+echo "=== Cluster Information ==="
+kubectl cluster-info
+echo ""
+echo "=== Node Status ==="
+kubectl get nodes -o wide
+echo ""
+echo "=== System Pods ==="
+kubectl get pods -n kube-system
+kubectl config set-context --current --namespace=lightbeam
+
+# Ensure bash-completion is available
+if ! type _init_completion >/dev/null 2>&1; then
+    # Try to install if system is Debian/Ubuntu
+    if [ -f /etc/debian_version ]; then
+        echo "Installing bash-completion..."
+        apt-get update -y
+        apt-get install -y bash-completion
+    else
+        echo "bash-completion not installed and cannot auto-install."
+    fi
+fi
+
+# Load bash-completion if present
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+elif [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+fi
+
+# Enable kubectl autocompletion
+if command -v kubectl >/dev/null 2>&1; then
+    source <(kubectl completion bash)
+else
+    echo "kubectl not found in PATH. Autocomplete not enabled."
+fi
+
+# Optional: Add 'k' alias
+alias k=kubectl
+complete -o default -F __start_kubectl k
+
+# Create Lightbeam systemd service and script
+tee /usr/local/bin/lightbeam.sh > /dev/null <<'EOF'
+#!/usr/bin/env bash
+
+trap 'kill $(jobs -p)' EXIT
+/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 443:443 --kubeconfig /root/.kube/config &
+PID=$!
+
+/bin/systemd-notify --ready
+
+while(true); do
+    FAIL=0
+    kill -0 $PID
+    if [[ $? -ne 0 ]]; then FAIL=1; fi
+
+    status_code=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+    curl_exit=\$?
+    echo "Lightbeam cluster health check: \$status_code (curl exit: \$curl_exit)"
+    if [[ \$curl_exit -ne 0 || ( \$status_code -ne 200 && \$status_code -ne 301 ) ]]; then
+        FAIL=1
+    fi
+
+    if [[ \$FAIL -eq 0 ]]; then /bin/systemd-notify WATCHDOG=1; fi
+    sleep 1
+done
+EOF
+chmod ugo+x /usr/local/bin/lightbeam.sh
+
+tee /etc/systemd/system/lightbeam.service > /dev/null <<'EOF'
+[Unit]
+Description=LightBeam Application
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+
+StartLimitIntervalSec=500
+StartLimitBurst=10000
+
+[Service]
+Type=notify
+Restart=always
+RestartSec=1
+TimeoutSec=5
+WatchdogSec=5
+ExecStart=/usr/local/bin/lightbeam.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "Systemd service file /etc/systemd/system/lightbeam.service has been created."
+
+# Reload systemd, enable and start the service
+systemctl daemon-reload
+systemctl enable lightbeam.service
+systemctl start lightbeam.service
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl
@@ -287,30 +401,3 @@ apt-mark hold snapd
 apt-mark hold systemd
 apt-mark hold systemd-sysv
 apt-mark hold systemd-timesyncd
-
-# Create lightbeam namespace if it doesn't exist
-kubectl create namespace lightbeam --dry-run=client -o yaml | kubectl apply -f -
-
-# Set default namespace as lightbeam
-kubectl config set-context --current --namespace=lightbeam
-
-echo "Done! Ready to deploy LightBeam Cluster!!"
-
-# Linux Command History with date and time and common aliases
-echo 'export HISTTIMEFORMAT="%d/%m/%y %T "' >> ~/.bashrc
-echo 'export HISTSIZE=10000' >> ~/.bashrc          # Keep 10,000 commands in memory
-echo 'export HISTFILESIZE=10000' >> ~/.bashrc      # Keep 10,000 commands in history file
-echo 'export HISTCONTROL=ignoreboth' >> ~/.bashrc  # Ignore duplicates and commands starting with space
-echo 'shopt -s histappend' >> ~/.bashrc            # Append to history file, don't overwrite
-echo "alias k=kubectl" >> ~/.bashrc
-
-# Display cluster info
-echo ""
-echo "=== Cluster Information ==="
-kubectl cluster-info
-echo ""
-echo "=== Node Status ==="
-kubectl get nodes -o wide
-echo ""
-echo "=== System Pods ==="
-kubectl get pods -n kube-system
