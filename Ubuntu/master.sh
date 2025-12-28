@@ -209,6 +209,35 @@ echo "3. Setup helm"
 curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm -rf helm-v3.13.1-linux-amd64.tar.gz linux-amd64
 helm version
 
+sudo apt-get install ipcalc -y 
+
+# Fetch the network interface name starting with 'ens'
+interface=$(ip -o link show | awk -F': ' '/^.*ens/ {print $2}' | head -n 1)
+
+# Retrieve the IP address associated with the interface
+vm_ip=$(ip -o -4 addr show "$interface" | awk '{print $4}' | cut -d/ -f1)
+echo "VM IP Address: $vm_ip"
+function ip_in_cidr() {
+    local ip=$1
+    local cidr=$2
+
+    # Use ipcalc to check if the IP is within the CIDR range
+    if ipcalc -c "$cidr" "$ip" &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+# Define the pod network CIDR
+pod_network_cidr="192.168.0.0/16"
+# Check if the VM's IP is within the CIDR range
+if ip_in_cidr "$vm_ip" "$pod_network_cidr"; then
+    echo "The IP $vm_ip is within the CIDR range $pod_network_cidr."
+    exit 0
+else
+    echo "The IP $vm_ip is NOT within the CIDR range $pod_network_cidr."
+fi
+
 echo "4. Initialize kubernetes cluster:"
 # Create the kubeadm config file with hardened security settings
 cat <<EOF > kubeadm-config.yaml
