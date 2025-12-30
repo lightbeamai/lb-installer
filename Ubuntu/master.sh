@@ -180,21 +180,21 @@ apt-get install -y apt-transport-https ca-certificates curl gpg
 # Create keyrings directory
 mkdir -p /etc/apt/keyrings
 
-# Download Kubernetes signing key (method that avoids control characters)
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key -o /tmp/k8s-key.gpg
+# Download Kubernetes signing key for v1.33 (method that avoids control characters)
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key -o /tmp/k8s-key.gpg
 gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/k8s-key.gpg
 rm -f /tmp/k8s-key.gpg
 
-# Create repository file manually (avoids echo/tee control character issues)
+# Create repository file manually for v1.33 (avoids echo/tee control character issues)
 cat > /etc/apt/sources.list.d/kubernetes.list << 'REPO_EOF'
-deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /
+deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /
 REPO_EOF
 
 # Update package index
 apt-get update -y
 
-# Install Kubernetes components with specific versions
-apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.6-1.1
+# Install Kubernetes 1.33 components with specific versions
+apt-get install -y kubelet=1.33.0-1.1 kubeadm=1.33.0-1.1 kubectl=1.33.0-1.1
 
 # Enable and start kubelet
 systemctl daemon-reload
@@ -220,7 +220,7 @@ nodeRegistration:
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
-kubernetesVersion: "v1.30.0"
+kubernetesVersion: "v1.33.0"
 networking:
   serviceSubnet: "10.200.0.0/16"
   podSubnet: "192.168.0.0/16"
@@ -241,8 +241,8 @@ rm -rf $HOME/.kube
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "5. Install network driver:"
-# Use the latest Calico version compatible with Kubernetes 1.30
-curl https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/calico.yaml -O && kubectl apply -f calico.yaml
+# Use Calico v3.30.0 which is compatible with Kubernetes 1.33
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/calico.yaml -O && kubectl apply -f calico.yaml
 
 # Wait for nodes to be ready
 timecheck=0
@@ -346,14 +346,14 @@ while(true); do
     kill -0 $PID
     if [[ $? -ne 0 ]]; then FAIL=1; fi
 
-    status_code=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
-    curl_exit=\$?
-    echo "Lightbeam cluster health check: \$status_code (curl exit: \$curl_exit)"
-    if [[ \$curl_exit -ne 0 || ( \$status_code -ne 200 && \$status_code -ne 301 ) ]]; then
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+    curl_exit=$?
+    echo "Lightbeam cluster health check: $status_code (curl exit: $curl_exit)"
+    if [[ $curl_exit -ne 0 || ( $status_code -ne 200 && $status_code -ne 301 ) ]]; then
         FAIL=1
     fi
 
-    if [[ \$FAIL -eq 0 ]]; then /bin/systemd-notify WATCHDOG=1; fi
+    if [[ $FAIL -eq 0 ]]; then /bin/systemd-notify WATCHDOG=1; fi
     sleep 1
 done
 EOF
