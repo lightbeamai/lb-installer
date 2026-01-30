@@ -387,6 +387,9 @@ systemctl daemon-reload
 systemctl enable lightbeam.service
 systemctl start lightbeam.service
 
+# UFW firewall you can deactivate it with this command
+ufw disable
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl

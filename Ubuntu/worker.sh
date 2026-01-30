@@ -193,6 +193,9 @@ systemctl status kubelet --no-pager -l
 
 serviceStatusCheck "kubelet.service" "False"
 
+# UFW firewall you can deactivate it with this command
+ufw disable
+
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
 apt-mark hold kubectl
