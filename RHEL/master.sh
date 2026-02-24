@@ -63,12 +63,22 @@ systemctl mask swap.target               # Completely disabled.
 
 sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-systemctl disable firewalld
-systemctl status firewalld
+systemctl disable --now firewalld
 
-export VERSION=1.28
-sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_8/devel:kubic:libcontainers:stable.repo
-sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/CentOS_8/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo
+export VERSION=1.32
+export CRIO_VERSION=1.32
+
+# Install CRI-O as the Kubernetes CRI runtime.
+# Remove any stale repo files from previous runs.
+sudo rm -f /etc/yum.repos.d/cri-o.repo /etc/yum.repos.d/devel:kubic:*.repo
+cat <<EOF | sudo tee /etc/yum.repos.d/cri-o.repo
+[cri-o]
+name=CRI-O
+baseurl=https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/addons:/cri-o:/stable:/v$CRIO_VERSION/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/addons:/cri-o:/stable:/v$CRIO_VERSION/rpm/repodata/repomd.xml.key
+EOF
 sudo yum install cri-o -y
 systemctl start crio
 
@@ -177,7 +187,7 @@ sudo yes | kubeadm reset
 if [ $install_docker = "true" ]; then
   sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket /var/run/dockershim.sock
 else
-  sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+  sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket unix:///var/run/crio/crio.sock
 fi
 
 mkdir -p /root/.kube
@@ -186,12 +196,8 @@ sudo chown $(id -u):$(id -g) /root/.kube/config
 
 kubectl taint nodes --all node-role.kubernetes.io/master-
 
-if [ $install_docker = "true" ]; then
-  kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
-else
-  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
-  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
-fi
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/tigera-operator.yaml
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/custom-resources.yaml
 
 echo "3. Setup helm"
 sudo curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && sudo tar -xvf helm-v3.13.1-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.13.1-linux-amd64.tar.gz
@@ -267,4 +273,6 @@ systemctl daemon-reload
 systemctl enable lightbeam.service
 systemctl start lightbeam.service
 
+# set default namespace as lightbeam
+kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
