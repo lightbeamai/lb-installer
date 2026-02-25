@@ -194,8 +194,12 @@ sudo chown $(id -u):$(id -g) /root/.kube/config
 
 kubectl taint nodes --all node-role.kubernetes.io/master-
 
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/tigera-operator.yaml
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/custom-resources.yaml
+if [ $install_docker = "true" ]; then
+  kubectl apply -f https://docs.projectcalico.org/v3.9/manifests/calico-typha.yaml
+else
+  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/tigera-operator.yaml
+  kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/custom-resources.yaml
+fi
 
 echo "3. Setup helm"
 sudo curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && sudo tar -xvf helm-v3.13.1-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/bin/ && sudo rm helm-v3.13.1-linux-amd64.tar.gz
