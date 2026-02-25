@@ -182,15 +182,6 @@ echo "kubelet Service is $(systemctl is-active kubelet)"
 echo "kubeadm reset"
 sudo yes | kubeadm reset
 
-if [ $install_docker = "true" ]; then
-  sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket /var/run/dockershim.sock
-else
-  sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket unix:///var/run/crio/crio.sock
-fi
-
-mkdir -p /root/.kube
-sudo yes | cp -i /etc/kubernetes/admin.conf /root/.kube/config
-sudo chown $(id -u):$(id -g) /root/.kube/config
 echo "Setup helm"
 curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-v3.13.1-linux-amd64.tar.gz && mv linux-amd64/helm /usr/local/bin/ && rm helm-v3.13.1-linux-amd64.tar.gz
 helm version
