@@ -53,10 +53,19 @@ swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
 systemctl mask swap.target               # Completely disabled.
 
-setenforce 0
-sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-systemctl disable firewalld
-systemctl status firewalld
+# SELinux is not default on Ubuntu, but disable if present
+if command -v setenforce >/dev/null 2>&1; then
+    setenforce 0
+    sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+fi
+
+# Ubuntu uses ufw, not firewalld by default
+if systemctl is-enabled ufw >/dev/null 2>&1; then
+    ufw disable
+    systemctl status ufw
+else
+    echo "UFW not enabled, skipping firewall disable"
+fi
 
 # Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
 # The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
@@ -68,6 +77,12 @@ systemctl restart containerd
 # Load necessary kernel modules.
 modprobe overlay
 modprobe br_netfilter
+
+# Make kernel modules persistent
+cat <<EOF > /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
 
 # Set required sysctl parameters.
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
@@ -119,7 +134,8 @@ function serviceStatusCheck() {
       do
         service=$1
         exit_required=$2
-        DOCKER_SERVICE_STATUS="$(systemctl is-active $service)"
+        # Strip ANSI escape sequences and get clean output
+        DOCKER_SERVICE_STATUS="$(systemctl is-active $service 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r')"
         if [ "${DOCKER_SERVICE_STATUS}" = "active" ]; then
           echo ""
           echo "$service running.."
@@ -135,17 +151,46 @@ function serviceStatusCheck() {
           if [ "${exit_required}" = "True" ]; then
             exit 1
           fi
+          break
         fi
       done
 }
 
-echo "2. Install kubeadm, kubectl and kubelet:"
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+echo "2. Install kubeadm, kubectl and kubelet for Kubernetes 1.33:"
+
+# Complete cleanup first
+rm -f /etc/apt/sources.list.d/kubernetes.list
+rm -rf /etc/apt/keyrings
+apt-get clean
+
+# Install required packages
+apt-get update -y
+apt-get install -y apt-transport-https ca-certificates curl gpg
+
+# Create keyrings directory
 mkdir -p /etc/apt/keyrings
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-apt-get update -y && apt-get install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.6-1.1
-systemctl daemon-reload && systemctl start kubelet && systemctl enable kubelet && systemctl status kubelet
+
+# Download Kubernetes signing key for v1.33
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Create repository file for v1.33
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+# Update package index
+apt-get update -y
+
+# Install Kubernetes 1.33 components
+apt-get install -y kubelet=1.33.0-1.1 kubeadm=1.33.0-1.1 kubectl=1.33.0-1.1
+
+# Enable and start kubelet
+systemctl daemon-reload
+systemctl enable kubelet
+systemctl start kubelet
+
+# Check kubelet status (it's normal for kubelet to be in crash loop before cluster init)
+echo "Note: kubelet may show as failed until cluster is initialized - this is normal"
+systemctl status kubelet --no-pager -l
+
 serviceStatusCheck "kubelet.service" "False"
 
 # Mark packages on hold to avoid an auto upgrade.
@@ -155,7 +200,7 @@ apt-mark hold kubeadm
 apt-mark hold containerd.io
 apt-mark hold docker-buildx-plugin
 apt-mark hold docker-ce
-apt-mark hold docker-cli
+apt-mark hold docker-ce-cli
 apt-mark hold docker-ce-rootless-extras
 apt-mark hold docker-compose-plugin
 apt-mark hold snapd
