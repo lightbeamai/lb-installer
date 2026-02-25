@@ -192,7 +192,7 @@ while true
     fi
   done
 
-# Check calico ippool config, patch if vxlanMode to Always if IpIpNode is not allowed.
+# Check calico ippool config, patch vxlanMode to Always if IpIpMode is not allowed.
 kubectl wait --for condition=established --timeout=60s crd/ippools.crd.projectcalico.org
 IPIP_MODE=$(kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.ipipMode}')
 if [[ "$IPIP_MODE" == "Never" ]]; then
