@@ -8,7 +8,7 @@ fi
 sudo yum update -y
 
 grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+export PATH="/usr/local/bin:$PATH"
 
 echo "Installing docker"
 sudo dnf config-manager --add-repo=https://download.docker.com/linux/rhel/docker-ce.repo
@@ -191,6 +191,18 @@ while true
       exit 1
     fi
   done
+
+# Check calico ippool config, patch if vxlanMode to Always if IpIpNode is not allowed.
+kubectl wait --for condition=established --timeout=60s crd/ippools.crd.projectcalico.org
+IPIP_MODE=$(kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.ipipMode}')
+if [[ "$IPIP_MODE" == "Never" ]]; then
+    kubectl patch ippool default-ipv4-ippool --type merge -p '{"spec":{"vxlanMode":"Always"}}'
+    echo "Patched vxlanMode to Always"
+else
+    echo "ipipMode is $IPIP_MODE, skipping patch"
+fi
+kubectl rollout restart daemonset calico-node -n kube-system
+kubectl rollout status daemonset calico-node -n kube-system --timeout=120s
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/local/bin/python
