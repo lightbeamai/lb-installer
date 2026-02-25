@@ -79,21 +79,6 @@ sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable --now firewalld
 
-export VERSION=1.32
-
-# Install CRI-O as the Kubernetes CRI runtime.
-# Remove any stale repo files from previous runs.
-sudo rm -f /etc/yum.repos.d/cri-o.repo /etc/yum.repos.d/devel:kubic:*.repo
-cat <<EOF | sudo tee /etc/yum.repos.d/cri-o.repo
-[cri-o]
-name=CRI-O
-baseurl=https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/addons:/cri-o:/stable:/v$VERSION/rpm/
-enabled=1
-gpgcheck=1
-gpgkey=https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/addons:/cri-o:/stable:/v$VERSION/rpm/repodata/repomd.xml.key
-EOF
-sudo yum install cri-o -y
-
 TIMEOUT=300
 SLEEP_INTERVAL=1
 
