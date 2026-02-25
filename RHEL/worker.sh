@@ -30,20 +30,13 @@ cgroupdriver_status=`docker info | grep -i "Cgroup Driver"  | grep systemd  | wc
 if [ $cgroupdriver_status == 1 ]; then
    echo "Docker cgroup driver is updated to systemd"
 else
-  echo "Installing podman podman-docker iproute-tc"
-  sudo yum install -y iproute-tc podman podman-docker vim
-  systemctl start podman
-  systemctl enable podman
-   echo "Failed to update docker cgroup driver is updated to systemd"
+   echo "Failed to update docker cgroup driver to systemd"
    exit 1
 fi
 
-echo "Installing containerd"
-sudo yum install containerd vim -y
-sudo systemctl enable containerd
-sudo systemctl start containerd
 # Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
 # The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
+# containerd.io is already installed above via the Docker repo — no separate install needed.
 mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml > /dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
@@ -66,8 +59,6 @@ net.bridge.bridge-nf-call-ip6tables = 1
 EOF
 
 sudo sysctl --system
-setenforce 0
-sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
 echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
 
 # Disable Swap Permanently.
@@ -75,8 +66,8 @@ swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
 systemctl mask swap.target               # Completely disabled.
 
-sudo setenforce 0
-sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+setenforce 0
+sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable --now firewalld
 
 TIMEOUT=300
@@ -149,17 +140,18 @@ echo "Installing kubeadm, kubectl and kubelet:"
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-sudo dnf install -y kubelet-1.32.0 kubeadm-1.32.0 kubectl-1.32.0 --disableexcludes=kubernetes
+sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet
 serviceStatusCheck "kubelet.service" "False"
 
-# Mark packages on hold to avoid an auto upgrade.
-sudo dnf mark install kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# Pin packages to avoid auto upgrade.
+sudo dnf install -y python3-dnf-plugin-versionlock
+sudo dnf versionlock add kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
