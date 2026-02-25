@@ -8,7 +8,7 @@ fi
 sudo yum update -y
 
 grep -qxF 'export PATH="/usr/local/bin:$PATH"' ~/.bashrc || echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
-export PATH="/usr/local/bin:$PATH"
+source ~/.bashrc
 
 echo "Installing docker"
 sudo dnf config-manager --add-repo=https://download.docker.com/linux/rhel/docker-ce.repo
