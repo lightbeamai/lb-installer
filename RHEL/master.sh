@@ -198,11 +198,11 @@ IPIP_MODE=$(kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.ipipMode}
 if [[ "$IPIP_MODE" == "Never" ]]; then
     kubectl patch ippool default-ipv4-ippool --type merge -p '{"spec":{"vxlanMode":"Always"}}'
     echo "Patched vxlanMode to Always"
+    kubectl rollout restart daemonset calico-node -n kube-system
+    kubectl rollout status daemonset calico-node -n kube-system --timeout=120s
 else
     echo "ipipMode is $IPIP_MODE, skipping patch"
 fi
-kubectl rollout restart daemonset calico-node -n kube-system
-kubectl rollout status daemonset calico-node -n kube-system --timeout=120s
 
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/local/bin/python
