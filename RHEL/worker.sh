@@ -66,8 +66,8 @@ swapoff -a                 # Disable all devices marked as swap in /etc/fstab.
 sed -e '/swap/ s/^#*/#/' -i /etc/fstab   # Comment the correct mounting point.
 systemctl mask swap.target               # Completely disabled.
 
-setenforce 0
-sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 systemctl disable --now firewalld
 
 TIMEOUT=300
