@@ -41,12 +41,9 @@ if ! crontab -l 2>/dev/null | grep -q "docker system prune"; then
 else
   echo "Docker prune cron job already exists. Skipping."
 fi
-echo "Installing containerd"
-sudo yum install containerd vim -y
-sudo systemctl enable containerd
-sudo systemctl start containerd
 # Containerd needs to be configured to use systemd cgroup driver to align with kubelet's cgroup management.
 # The SystemdCgroup setting tells containerd to use systemd to manage container cgroups instead of cgroupfs.
+# containerd.io is already installed above via the Docker repo — no separate install needed.
 mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml > /dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
@@ -69,8 +66,6 @@ net.bridge.bridge-nf-call-ip6tables = 1
 EOF
 
 sudo sysctl --system
-setenforce 0
-sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
 echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
 
 # Disable Swap Permanently.
@@ -80,8 +75,7 @@ systemctl mask swap.target               # Completely disabled.
 
 sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-systemctl disable firewalld
-systemctl status firewalld
+systemctl disable --now firewalld
 
 TIMEOUT=300
 SLEEP_INTERVAL=1
@@ -153,14 +147,14 @@ echo "Installing kubeadm, kubectl and kubelet:"
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-sudo dnf install -y kubelet-1.32.0 kubeadm-1.32.0 kubectl-1.32.0 --disableexcludes=kubernetes
+sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 sudo systemctl start kubelet &
 serviceStatusCheck "kubelet.service" "False"
@@ -173,9 +167,9 @@ curl -L -O https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz && tar -xvf helm-
 helm version
 
 echo "Initialize kubernetes cluster:"
-kubeadm init --pod-network-cidr=192.168.0.0/16
+kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket unix:///run/containerd/containerd.sock
 rm -rf $HOME/.kube
-mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
+mkdir -p $HOME/.kube && cp -f /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "Installing network driver:"
 curl https://raw.githubusercontent.com/projectcalico/calico/v3.29.0/manifests/calico.yaml -O && kubectl apply -f calico.yaml
@@ -198,19 +192,31 @@ while true
     fi
   done
 
+# Check calico ippool config, patch vxlanMode to Always if IpIpMode is not allowed.
+kubectl wait --for condition=established --timeout=60s crd/ippools.crd.projectcalico.org
+IPIP_MODE=$(kubectl get ippool default-ipv4-ippool -o jsonpath='{.spec.ipipMode}')
+if [[ "$IPIP_MODE" == "Never" ]]; then
+    kubectl patch ippool default-ipv4-ippool --type merge -p '{"spec":{"vxlanMode":"Always"}}'
+    echo "Patched vxlanMode to Always"
+    kubectl rollout restart daemonset calico-node -n kube-system
+    kubectl rollout status daemonset calico-node -n kube-system --timeout=120s
+else
+    echo "ipipMode is $IPIP_MODE, skipping patch"
+fi
+
 # Setup python3.
 sudo cp /usr/bin/python3 /usr/local/bin/python
 sudo dnf install -y python3-pip wget git
 
 cat <<'EOF' > /usr/local/bin/lightbeam.sh
-#!/usr/local/bin/env bash
+#!/usr/bin/env bash
 
 trap 'kill $(jobs -p)' EXIT
 
-/usr/local/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 --kubeconfig /root/.kube/config &
+/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 80:80 --kubeconfig /root/.kube/config &
 PID1=$!
 
-/usr/local/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 443:443 --kubeconfig /root/.kube/config &
+/usr/bin/kubectl port-forward service/kong-proxy -n lightbeam --address 0.0.0.0 443:443 --kubeconfig /root/.kube/config &
 PID2=$!
 
 /bin/systemd-notify --ready
@@ -269,5 +275,6 @@ systemctl start lightbeam.service
 kubectl config set-context --current --namespace lightbeam
 echo "Done! Ready to deploy LightBeam Cluster!!"
 
-# Mark packages on hold to avoid an auto upgrade.
-sudo dnf mark install kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# Pin packages to avoid auto upgrade.
+sudo dnf install -y python3-dnf-plugin-versionlock
+sudo dnf versionlock add kubelet kubeadm kubectl docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
