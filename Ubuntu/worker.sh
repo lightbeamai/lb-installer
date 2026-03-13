@@ -7,6 +7,7 @@ fi
 
 TIMEOUT=300
 SLEEP_INTERVAL=1
+ULIMIT=1048576
 
 # Remove all older packages.
 apt-get -y remove docker docker-engine docker.io containerd runc kubeadm kubelet kubectl
@@ -72,6 +73,33 @@ fi
 mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml > /dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+# Configure open file descriptor ulimit
+# Done here at node setup time so containerd starts with the correct limit
+# from the very first launch — no DaemonSet run required after cluster init.
+#
+# Two settings must be raised in order (each acts as a ceiling for the next):
+#   1. fs.nr_open  — kernel hard ceiling; no process can exceed this
+#   2. LimitNOFILE — containerd's systemd service limit, inherited by all pods
+echo "Configuring open file descriptor ulimit to $ULIMIT..."
+
+# Step 1: raise and persist the kernel ceiling
+sysctl -w fs.nr_open=$ULIMIT
+sed -i '/^fs\.nr_open/d' /etc/sysctl.conf
+echo "fs.nr_open = $ULIMIT" >> /etc/sysctl.conf
+echo "  [OK] fs.nr_open set to $ULIMIT"
+
+# Step 2: write the containerd systemd drop-in
+mkdir -p /etc/systemd/system/containerd.service.d
+cat <<EOF > /etc/systemd/system/containerd.service.d/ulimits.conf
+[Service]
+LimitNOFILE=$ULIMIT
+EOF
+echo "  [OK] containerd drop-in written"
+
+# Reload systemd so it picks up the new drop-in before the restart below
+systemctl daemon-reload
+
 systemctl restart containerd
 
 # Load necessary kernel modules.
@@ -207,3 +235,17 @@ apt-mark hold snapd
 apt-mark hold systemd
 apt-mark hold systemd-sysv
 apt-mark hold systemd-timesyncd
+
+# Verify ulimit was applied correctly
+echo ""
+echo "=== Ulimit Verification ==="
+ACTUAL_NR_OPEN=$(sysctl -n fs.nr_open)
+CONTAINERD_PID=$(pidof containerd | cut -d" " -f1)
+ACTUAL_LIMIT=$(grep "Max open files" /proc/$CONTAINERD_PID/limits | awk '{print $5}')
+echo "  fs.nr_open              : $ACTUAL_NR_OPEN  (expected $ULIMIT)"
+echo "  containerd LimitNOFILE  : $ACTUAL_LIMIT  (expected $ULIMIT)"
+if [ "$ACTUAL_NR_OPEN" -eq "$ULIMIT" ] && [ "$ACTUAL_LIMIT" -eq "$ULIMIT" ]; then
+    echo "  [OK] Ulimit configured correctly."
+else
+    echo "  [WARN] Ulimit mismatch — run installer/ulimit-daemonset.py to correct worker nodes."
+fi
