@@ -12,15 +12,29 @@ SELECT
             FROM sysindexes i
             WHERE i.id = o.id
               AND i.status & 2048 = 2048
-              AND INDEX_COL(o.name, i.indid, 1) = c.name
+              AND (
+                    c.name = INDEX_COL(o.name, i.indid, 1) OR
+                    c.name = INDEX_COL(o.name, i.indid, 2) OR
+                    c.name = INDEX_COL(o.name, i.indid, 3) OR
+                    c.name = INDEX_COL(o.name, i.indid, 4) OR
+                    c.name = INDEX_COL(o.name, i.indid, 5) OR
+                    c.name = INDEX_COL(o.name, i.indid, 6) OR
+                    c.name = INDEX_COL(o.name, i.indid, 7) OR
+                    c.name = INDEX_COL(o.name, i.indid, 8) OR
+                    c.name = INDEX_COL(o.name, i.indid, 9) OR
+                    c.name = INDEX_COL(o.name, i.indid, 10) OR
+                    c.name = INDEX_COL(o.name, i.indid, 11) OR
+                    c.name = INDEX_COL(o.name, i.indid, 12) OR
+                    c.name = INDEX_COL(o.name, i.indid, 13) OR
+                    c.name = INDEX_COL(o.name, i.indid, 14) OR
+                    c.name = INDEX_COL(o.name, i.indid, 15) OR
+                    c.name = INDEX_COL(o.name, i.indid, 16)
+              )
         ) THEN 'PRIMARY KEY'
         ELSE NULL
     END AS constraint_type,
-    CONVERT(BIT, 0) AS is_view,
-    CASE
-        WHEN c.status & 8 = 8 THEN CONVERT(BIT, 1)
-        ELSE CONVERT(BIT, 0)
-    END AS is_nullable,
+    'false' AS is_view,
+    CASE WHEN c.status & 8 = 8 THEN 'true' ELSE 'false' END AS is_nullable,
     ISNULL(row_count(db_id(), o.id), 0) AS num_rows
 FROM
     dbo.sysobjects o
