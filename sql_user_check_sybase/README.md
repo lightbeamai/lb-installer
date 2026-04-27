@@ -2,27 +2,17 @@
 
 ### Pre-requisites
 
-Install [isql](https://infocenter.sybase.com/help/index.jsp?topic=/com.sybase.infocenter.dc36272.1572/html/commands/commands89.htm) (part of Sybase Open Client) on the machine.
-
-The script is designed to run with the LightBeam minimal-permissions Sybase
-ASE user (login + `sp_adduser` to the target database + `GRANT SELECT` on
-all user tables and views in that database).
-
-The script must be run **once per database** the user has been added to.
-The database-list query relies on the default `guest` user in `master` for
-read access to `master..sysdatabases` / `master..sysusages` — the same
-mechanism the production scanner uses.
+Install [`isql`](https://help.sap.com/docs/SAP_ASE) (part of SAP ASE / Sybase Open Client) on the machine.
 
 ### Run the script
 
-Specify the following options to run the script
+Run the script once per database the LightBeam user has been added to.
 
 * HOSTNAME: Hostname or IP of the Sybase ASE server.
-* PORT: Port number of the Sybase ASE server (default: 5000).
+* PORT: Port number (default: 5000).
 * USERNAME: Username to use for connecting to the instance.
-* DATABASE_NAME: Name of the database to connect to. The user must have been
-  added to this database via `sp_adduser`.
-* OUTPUT_FILE_PATH: Path to an output file to store the output of the script.
+* DATABASE_NAME: Database to connect to.
+* OUTPUT_FILE_PATH: Path to an output file to store the script output.
 * Password: The script will prompt for password.
 
 stats Mode:
