@@ -6,12 +6,7 @@ Install [isql](https://infocenter.sybase.com/help/index.jsp?topic=/com.sybase.in
 
 The script is designed to run with the LightBeam minimal-permissions Sybase
 ASE user (login + `sp_adduser` to the target database + `GRANT SELECT` on
-all user tables and views in that database). The full-metadata queries
-mirror the production Sybase metadata extractor in
-`python-utils/structured_data/structured_data_utils/consts.py`
-(`SYBASE_METADATA_EXTRACTOR_SQL` for tables, `SYBASE_VIEWS_EXTRACTOR_SQL`
-for views) so a successful run here implies the production scanner will
-work with the same credentials.
+all user tables and views in that database).
 
 The script must be run **once per database** the user has been added to.
 The database-list query relies on the default `guest` user in `master` for
