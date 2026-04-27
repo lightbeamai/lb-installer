@@ -1,55 +1,83 @@
--- Fetch database dictionary
+-- Mirrors the production metadata extractor queries from
+-- python-utils/structured_data/structured_data_utils/consts.py:
+--   * SYBASE_METADATA_EXTRACTOR_SQL  -- user tables (type = 'U')
+--   * SYBASE_VIEWS_EXTRACTOR_SQL     -- views (type = 'V'), excludes sysquerymetrics
+--
+-- Running these here verifies that the LightBeam scanner user has the same
+-- read access the production extractor needs. Plus a foreign-key dump for
+-- diagnostic purposes.
+
+-- Tables: SYBASE_METADATA_EXTRACTOR_SQL
 SELECT
-    db_name() AS [database],
     u.name AS schema_name,
     o.name AS table_name,
+    '' AS table_description,
     c.name AS column_name,
     t.name AS data_type,
-    c.colid AS column_id,
+    '' AS column_description,
+    DB_NAME() AS [database],
+    'false' AS is_view,
+    ISNULL(row_count(DB_ID(), o.id), -1) AS num_rows,
+    CASE WHEN c.status & 8 = 8 THEN 'true' ELSE 'false' END AS is_nullable,
     CASE
         WHEN EXISTS (
-            SELECT 1
-            FROM sysindexes i
-            WHERE i.id = o.id
-              AND i.status & 2048 = 2048
-              AND (
-                    c.name = INDEX_COL(o.name, i.indid, 1) OR
-                    c.name = INDEX_COL(o.name, i.indid, 2) OR
-                    c.name = INDEX_COL(o.name, i.indid, 3) OR
-                    c.name = INDEX_COL(o.name, i.indid, 4) OR
-                    c.name = INDEX_COL(o.name, i.indid, 5) OR
-                    c.name = INDEX_COL(o.name, i.indid, 6) OR
-                    c.name = INDEX_COL(o.name, i.indid, 7) OR
-                    c.name = INDEX_COL(o.name, i.indid, 8) OR
-                    c.name = INDEX_COL(o.name, i.indid, 9) OR
-                    c.name = INDEX_COL(o.name, i.indid, 10) OR
-                    c.name = INDEX_COL(o.name, i.indid, 11) OR
-                    c.name = INDEX_COL(o.name, i.indid, 12) OR
-                    c.name = INDEX_COL(o.name, i.indid, 13) OR
-                    c.name = INDEX_COL(o.name, i.indid, 14) OR
-                    c.name = INDEX_COL(o.name, i.indid, 15) OR
-                    c.name = INDEX_COL(o.name, i.indid, 16)
-              )
+            SELECT 1 FROM sysindexes i
+            WHERE i.id = o.id AND i.status & 2048 = 2048
+            AND (
+                c.name = INDEX_COL(o.name, i.indid, 1) OR
+                c.name = INDEX_COL(o.name, i.indid, 2) OR
+                c.name = INDEX_COL(o.name, i.indid, 3) OR
+                c.name = INDEX_COL(o.name, i.indid, 4) OR
+                c.name = INDEX_COL(o.name, i.indid, 5) OR
+                c.name = INDEX_COL(o.name, i.indid, 6) OR
+                c.name = INDEX_COL(o.name, i.indid, 7) OR
+                c.name = INDEX_COL(o.name, i.indid, 8) OR
+                c.name = INDEX_COL(o.name, i.indid, 9) OR
+                c.name = INDEX_COL(o.name, i.indid, 10) OR
+                c.name = INDEX_COL(o.name, i.indid, 11) OR
+                c.name = INDEX_COL(o.name, i.indid, 12) OR
+                c.name = INDEX_COL(o.name, i.indid, 13) OR
+                c.name = INDEX_COL(o.name, i.indid, 14) OR
+                c.name = INDEX_COL(o.name, i.indid, 15) OR
+                c.name = INDEX_COL(o.name, i.indid, 16)
+            )
         ) THEN 'PRIMARY KEY'
         ELSE NULL
     END AS constraint_type,
-    'false' AS is_view,
-    CASE WHEN c.status & 8 = 8 THEN 'true' ELSE 'false' END AS is_nullable,
-    ISNULL(row_count(db_id(), o.id), 0) AS num_rows
-FROM
-    dbo.sysobjects o
-    INNER JOIN dbo.sysusers u ON o.uid = u.uid
-    INNER JOIN dbo.syscolumns c ON o.id = c.id
-    INNER JOIN dbo.systypes t ON c.usertype = t.usertype
-WHERE
-    o.type = 'U'
-ORDER BY
-    schema_name,
-    table_name,
-    column_id
+    (CONVERT(bigint, data_pages(DB_ID(), o.id, 0))
+        + CONVERT(bigint, data_pages(DB_ID(), o.id, 1))) * CONVERT(bigint, @@maxpagesize) AS table_size
+FROM dbo.sysobjects o
+INNER JOIN dbo.syscolumns c ON o.id = c.id
+INNER JOIN dbo.systypes t ON c.usertype = t.usertype
+INNER JOIN dbo.sysusers u ON o.uid = u.uid
+WHERE o.type = 'U'
+ORDER BY u.name, o.name, c.colid
 go
 
--- Fetch relationships (foreign keys)
+-- Views: SYBASE_VIEWS_EXTRACTOR_SQL
+SELECT
+    u.name AS schema_name,
+    o.name AS table_name,
+    '' AS table_description,
+    c.name AS column_name,
+    t.name AS data_type,
+    '' AS column_description,
+    DB_NAME() AS [database],
+    'true' AS is_view,
+    -1 AS num_rows,
+    CASE WHEN c.status & 8 = 8 THEN 'true' ELSE 'false' END AS is_nullable,
+    NULL AS constraint_type,
+    0 AS table_size
+FROM dbo.sysobjects o
+INNER JOIN dbo.syscolumns c ON o.id = c.id
+INNER JOIN dbo.systypes t ON c.usertype = t.usertype
+INNER JOIN dbo.sysusers u ON o.uid = u.uid
+WHERE o.type = 'V'
+    AND o.name NOT IN ('sysquerymetrics')
+ORDER BY u.name, o.name, c.colid
+go
+
+-- Foreign-key relationships (diagnostic; no production equivalent).
 SELECT
     u_fk.name AS l_schema_name,
     o_fk.name AS l_table_name,

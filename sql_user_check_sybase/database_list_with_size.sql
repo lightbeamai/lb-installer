@@ -1,11 +1,22 @@
+-- Lists user databases on the Sybase ASE server with their sizes.
+-- Mirrors SYBASE_DATABASE_LIST_SQL in
+-- python-utils/structured_data/structured_data_utils/sybase/consts.py
+-- (system database exclusion list: master, tempdb, model, sybsystemprocs,
+-- sybsecurity, sybsystemdb, sybpcidb, dbccdb, sybmgmtdb, sybdiag).
+--
+-- The minimal-permissions onboarding user can read master..sysdatabases /
+-- sysusages via the default `guest` user in master, which is how the
+-- production scanner discovers databases.
 SELECT
-    name AS database_name,
-    (sum(size) * (@@maxpagesize / 1024)) / 1024 AS database_size_mb
+    d.name AS database_name,
+    (SUM(u.size) * (@@maxpagesize / 1024)) / 1024 AS database_size_mb
 FROM
-    master.dbo.sysusages u
-    JOIN master.dbo.sysdatabases d ON u.dbid = d.dbid
+    master..sysusages u
+    JOIN master..sysdatabases d ON u.dbid = d.dbid
 WHERE
-    d.name NOT IN ('master', 'tempdb', 'model', 'sybsystemprocs', 'sybsecurity', 'sybsystemdb', 'dbccdb')
+    d.name NOT IN ('master', 'tempdb', 'model', 'sybsystemprocs',
+                   'sybsecurity', 'sybsystemdb', 'sybpcidb', 'dbccdb',
+                   'sybmgmtdb', 'sybdiag')
 GROUP BY
     d.name
 ORDER BY

@@ -1,3 +1,6 @@
+-- Data-type distribution per schema, scoped to user tables (type = 'U')
+-- to align with DEFAULT_SYBASE_SCHEMA_LIST and SYBASE_METADATA_EXTRACTOR_SQL
+-- in python-utils/structured_data/structured_data_utils.
 SELECT
     u.name AS schema_name,
     t.name AS data_type,

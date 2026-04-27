@@ -1,3 +1,6 @@
+-- Schema-level counts. Mirrors DEFAULT_SYBASE_SCHEMA_LIST in
+-- python-utils/structured_data/structured_data_utils/sybase/consts.py
+-- (user tables only, type = 'U'), with row_count added for convenience.
 SELECT
     u.name AS schema_name,
     COUNT(DISTINCT o.name) AS table_count,
