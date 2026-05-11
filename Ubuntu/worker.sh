@@ -9,6 +9,33 @@ TIMEOUT=300
 SLEEP_INTERVAL=1
 ULIMIT=1048576
 
+echo "Hardening sshd..."
+CURRENT_KEX=$(sshd -T | grep "^kexalgorithms" | awk '{print $2}')
+CURRENT_GSSKEX=$(sshd -T | grep "^gssapikexalgorithms" | awk '{print $2}')
+# Remove all DHE algorithms
+HARDENED_KEX=$(echo "$CURRENT_KEX" | tr ',' '\n' | grep -v "diffie-hellman" | paste -sd ',' -)
+HARDENED_GSSKEX=$(echo "$CURRENT_GSSKEX" | tr ',' '\n' | grep -v "gss-group14\|gss-group16\|gss-gex" | paste -sd ',' - || echo "")
+if [ -z "$HARDENED_GSSKEX" ]; then
+  echo "GSSAPIKexAlgorithms: empty — will disable GSSAPI KEX"
+  GSSKEX_LINE="GSSAPIAuthentication no"
+else
+  GSSKEX_LINE="GSSAPIKexAlgorithms $HARDENED_GSSKEX"
+fi
+echo "Writing config to /etc/ssh/sshd_config.d/kex-hardening.conf"
+cat > /etc/ssh/sshd_config.d/kex-hardening.conf << EOF
+KexAlgorithms $HARDENED_KEX
+$GSSKEX_LINE
+EOF
+echo "Validating config..."
+if sshd -t; then
+  echo "Config valid — restarting SSH"
+  systemctl restart ssh || systemctl restart sshd
+else
+  echo "Config invalid — reverting"
+  rm /etc/ssh/sshd_config.d/kex-hardening.conf
+  exit 1
+fi
+
 # Remove all older packages.
 apt-get -y remove docker docker-engine docker.io containerd runc kubeadm kubelet kubectl
 
