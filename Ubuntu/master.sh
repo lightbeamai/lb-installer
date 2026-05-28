@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+UBUNTU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=Ubuntu/common/kubelet-node-protection.sh
+source "$UBUNTU_DIR/common/kubelet-node-protection.sh"
+
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root."
   exit
@@ -288,6 +292,16 @@ etcd:
     extraArgs:
       cipher-suites: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
 EOF
+lb_render_kubelet_configuration >> kubeadm-config.yaml
+lb_print_kubelet_node_protection_summary
+
+echo "Validating kubeadm-config.yaml..."
+if kubeadm config images list --config kubeadm-config.yaml >/dev/null; then
+  echo "kubeadm-config.yaml is valid."
+else
+  echo "ERROR: kubeadm-config.yaml failed kubeadm validation."
+  exit 1
+fi
 
 kubeadm init --config kubeadm-config.yaml
 
