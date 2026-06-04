@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+UBUNTU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$UBUNTU_DIR/.." && pwd)"
+# shellcheck source=Ubuntu/common/kubelet-node-protection.sh
+source "$UBUNTU_DIR/common/kubelet-node-protection.sh"
+
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root."
   exit
@@ -247,6 +252,26 @@ echo "Note: kubelet may show as failed until cluster is initialized - this is no
 systemctl status kubelet --no-pager -l
 
 serviceStatusCheck "kubelet.service" "False"
+
+echo ""
+echo "=== Kubelet Node Protection ==="
+lb_print_kubelet_node_protection_summary
+if [ -f /var/lib/kubelet/config.yaml ]; then
+  echo "Detected /var/lib/kubelet/config.yaml. Applying local kubelet node protection settings..."
+  if [ -x "$REPO_ROOT/scripts/apply-kubelet-node-protection.sh" ]; then
+    "$REPO_ROOT/scripts/apply-kubelet-node-protection.sh"
+  else
+    echo "Post-join apply script is not executable at $REPO_ROOT/scripts/apply-kubelet-node-protection.sh"
+    echo "After kubeadm join, run it manually from the lb-installer repository:"
+    echo "  sudo $REPO_ROOT/scripts/apply-kubelet-node-protection.sh"
+  fi
+else
+  echo "kubeadm join will fetch the cluster-level kubelet config created during kubeadm init."
+  echo "For existing or manually joined nodes, run after join:"
+  echo "  sudo $REPO_ROOT/scripts/apply-kubelet-node-protection.sh"
+  echo "Then verify with:"
+  echo "  sudo $REPO_ROOT/scripts/verify-kubelet-node-protection.sh"
+fi
 
 # Mark packages on hold to avoid an auto upgrade.
 apt-mark hold kubelet
