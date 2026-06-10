@@ -33,7 +33,7 @@ if sshd -t; then
 else
   echo "Config invalid — reverting"
   rm /etc/ssh/sshd_config.d/kex-hardening.conf
-  echo -e "\e[31mSSH hardening failed.\e[0m"
+  echo -e "\e[31mSSH hardening failed\e[0m"
 fi
 
 # Remove all older packages.
