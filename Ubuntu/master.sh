@@ -16,40 +16,38 @@ CURRENT_GSSKEX=$(sshd -T | grep "^gssapikexalgorithms" | awk '{print $2}')
 # Remove all DHE algorithms
 HARDENED_KEX=$(echo "$CURRENT_KEX" | tr ',' '\n' | grep -v "diffie-hellman" | paste -sd ',' -)
 if [ -z "$HARDENED_KEX" ]; then
-  echo "No non-DHE KEX algorithms found — aborting hardening"
-  return 1
-fi
-
-# Handle GSSAPI KEX
-GSSKEX_LINE=""
-if [ -n "$CURRENT_GSSKEX" ]; then
-  HARDENED_GSSKEX=$(echo "$CURRENT_GSSKEX" | tr ',' '\n' | grep -v "gss-group14\|gss-group16\|gss-gex" | paste -sd ',' -)
-  if [ -z "$HARDENED_GSSKEX" ]; then
-    echo "GSSAPIKexAlgorithms: empty after hardening — disabling GSSAPI KEX"
-    GSSKEX_LINE="GSSAPIAuthentication no"
-  else
-    GSSKEX_LINE="GSSAPIKexAlgorithms $HARDENED_GSSKEX
-GSSAPIAuthentication yes"
-  fi
+  echo "No non-DHE KEX algorithms found — skipping hardening"
 else
-  echo "GSSAPI KEX not supported on this system — skipping"
-fi
+  # Handle GSSAPI KEX
+  GSSKEX_LINE=""
+  if [ -n "$CURRENT_GSSKEX" ]; then
+    HARDENED_GSSKEX=$(echo "$CURRENT_GSSKEX" | tr ',' '\n' | grep -v "gss-group14\|gss-group16\|gss-gex" | paste -sd ',' -)
+    if [ -z "$HARDENED_GSSKEX" ]; then
+      echo "GSSAPIKexAlgorithms: empty after hardening — disabling GSSAPI KEX"
+      GSSKEX_LINE="GSSAPIAuthentication no"
+    else
+      GSSKEX_LINE="GSSAPIKexAlgorithms $HARDENED_GSSKEX
+GSSAPIAuthentication yes"
+    fi
+  else
+    echo "GSSAPI KEX not supported on this system — skipping"
+  fi
 
-echo "Writing config to /etc/ssh/sshd_config.d/kex-hardening.conf"
-cat > /etc/ssh/sshd_config.d/kex-hardening.conf << EOF
+  echo "Writing config to /etc/ssh/sshd_config.d/kex-hardening.conf"
+  cat > /etc/ssh/sshd_config.d/kex-hardening.conf << EOF
 KexAlgorithms $HARDENED_KEX
 $GSSKEX_LINE
 EOF
 
-echo "Validating config..."
-if sshd -t; then
-  echo "Config valid — restarting SSH"
-  systemctl restart ssh || systemctl restart sshd
-else
-  echo "Config invalid — reverting"
-  rm /etc/ssh/sshd_config.d/kex-hardening.conf
-  echo -e "\e[31mSSH hardening failed\e[0m"
-  return 1
+  echo "Validating config..."
+  if sshd -t; then
+    echo "Config valid — restarting SSH"
+    systemctl restart ssh || systemctl restart sshd
+  else
+    echo "Config invalid — reverting"
+    rm /etc/ssh/sshd_config.d/kex-hardening.conf
+    echo -e "\e[31mSSH hardening failed\e[0m"
+  fi
 fi
 
 # Remove all older packages.
