@@ -225,11 +225,28 @@ if [[ " ${SELECTED_LABELS[*]} " == *" google-cloud-storage "* ]]; then
   prompt TOPIC_NAME "Pub/Sub topic name used for GCS bucket notifications" "gc-storage-publisher-topic"
 fi
 
+# Walks the project's resource hierarchy (project -> folder(s) -> organization) to find
+# the organization ID that owns it, so we can offer it as a confirmable default instead
+# of making the user look it up by hand. Prints nothing (and the caller falls back to a
+# required prompt) if there's no access or the project has no organization ancestor.
+detect_org_id() {
+  local project="$1"
+  gcloud projects get-ancestors "$project" --format="value(id,type)" 2>/dev/null \
+    | awk '$2 == "organization" { print $1; exit }'
+}
+
 ORG_ID=""
 PROJECT_IDS=()
 read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org
 if [[ "$has_org" =~ ^[Yy]$ ]]; then
-  prompt ORG_ID "GCP organization ID"
+  echo "Looking up the organization that owns project ${SA_PROJECT}..."
+  DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
+  if [[ -n "$DETECTED_ORG_ID" ]]; then
+    prompt ORG_ID "GCP organization ID" "$DETECTED_ORG_ID"
+  else
+    echo "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
+    prompt ORG_ID "GCP organization ID"
+  fi
 else
   echo "No org-level access — the role will be bound on each project individually instead."
   while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
