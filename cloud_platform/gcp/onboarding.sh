@@ -118,6 +118,17 @@ DISCOVERY_PERMISSIONS=(
 
 command -v gcloud >/dev/null 2>&1 || { echo "ERROR: gcloud CLI not found on PATH."; exit 1; }
 
+# This script is interactive, so it needs to read prompts from the terminal even when
+# invoked as `curl ... | bash` — in that case bash's own stdin is the pipe carrying the
+# rest of the script source, not the keyboard, so every `read` below is pinned to
+# /dev/tty instead of plain stdin. Fail fast with a clear message if there's no
+# controlling terminal to read from (e.g. running non-interactively in CI).
+if [[ ! -r /dev/tty ]]; then
+  echo "ERROR: this script is interactive and needs a terminal (/dev/tty) to read your" >&2
+  echo "answers from — it can't run non-interactively (e.g. piped in CI)." >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Interactive prompts
 # ---------------------------------------------------------------------------
@@ -126,11 +137,11 @@ command -v gcloud >/dev/null 2>&1 || { echo "ERROR: gcloud CLI not found on PATH
 prompt() {
   local __var_name="$1" __question="$2" __default="${3:-}" __input
   if [[ -n "$__default" ]]; then
-    read -r -p "$__question [$__default]: " __input
+    read -r -p "$__question [$__default]: " __input < /dev/tty
     __input="${__input:-$__default}"
   else
     while [[ -z "${__input:-}" ]]; do
-      read -r -p "$__question: " __input
+      read -r -p "$__question: " __input < /dev/tty
       [[ -z "$__input" ]] && echo "  This field is required."
     done
   fi
@@ -167,7 +178,7 @@ echo "  1) Google Cloud Storage"
 echo "  2) BigQuery"
 echo "  3) Auto-discovery (read-only GCP resource discovery)"
 while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
-  read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice
+  read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice < /dev/tty
   IFS=',' read -r -a ds_selections <<< "$ds_choice"
   for selection in "${ds_selections[@]}"; do
     selection="$(echo "$selection" | tr -d '[:space:]')"
@@ -237,7 +248,7 @@ detect_org_id() {
 
 ORG_ID=""
 PROJECT_IDS=()
-read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org
+read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org < /dev/tty
 if [[ "$has_org" =~ ^[Yy]$ ]]; then
   echo "Looking up the organization that owns project ${SA_PROJECT}..."
   DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
@@ -250,7 +261,7 @@ if [[ "$has_org" =~ ^[Yy]$ ]]; then
 else
   echo "No org-level access — the role will be bound on each project individually instead."
   while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
-    read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input
+    read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input < /dev/tty
     if [[ -n "$project_ids_input" ]]; then
       IFS=',' read -r -a PROJECT_IDS <<< "$project_ids_input"
     else
@@ -263,7 +274,7 @@ prompt KEY_OUTPUT_FILE "Path to write the JSON key to" "service-account-key.json
 ENCODED_OUTPUT_FILE="${KEY_OUTPUT_FILE}.b64"
 
 DRY_RUN=false
-read -r -p "Dry run only — print the gcloud commands without making any changes? [y/N] " dry_run_answer
+read -r -p "Dry run only — print the gcloud commands without making any changes? [y/N] " dry_run_answer < /dev/tty
 [[ "$dry_run_answer" =~ ^[Yy]$ ]] && DRY_RUN=true
 
 # Prints the command instead of running it when dry-run was chosen. Only wraps mutating
@@ -294,7 +305,7 @@ fi
 echo "  Key output:           ${KEY_OUTPUT_FILE} (+ base64 at ${ENCODED_OUTPUT_FILE})"
 echo "================================================================================"
 if ! $DRY_RUN; then
-  read -r -p "Proceed? [y/N] " confirm
+  read -r -p "Proceed? [y/N] " confirm < /dev/tty
   [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 fi
 
