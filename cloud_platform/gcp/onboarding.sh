@@ -42,6 +42,27 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Color helpers — only emit ANSI escapes to a real terminal, and respect
+# NO_COLOR (https://no-color.org/) plus a piped/redirected stdout.
+# ---------------------------------------------------------------------------
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  C_RESET=$'\033[0m'   C_BOLD=$'\033[1m'   C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'    C_GREEN=$'\033[32m' C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'   C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN=''
+fi
+
+rule()    { printf '%s%s%s\n' "$C_DIM" "================================================================================" "$C_RESET"; }
+banner()  { printf '%s%s%s%s\n' "$C_BOLD" "$C_CYAN" "$*" "$C_RESET"; }
+step()    { printf '%s%s%s\n' "$C_CYAN" "$*" "$C_RESET"; }
+info()    { printf '%s%s%s\n' "$C_BLUE" "$*" "$C_RESET"; }
+success() { printf '%s%s%s\n' "$C_GREEN" "$*" "$C_RESET"; }
+warn()    { printf '%s%s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
+err()     { printf '%sERROR:%s %s\n' "$C_RED$C_BOLD" "$C_RESET$C_RED" "$*$C_RESET" >&2; }
+field()   { printf '  %s%-24s%s%s\n' "$C_BOLD" "$1:" "$C_RESET" "$2"; }
+
+# ---------------------------------------------------------------------------
 # Permission sets per supported data source type
 # ---------------------------------------------------------------------------
 GCS_PERMISSIONS=(
@@ -116,7 +137,7 @@ DISCOVERY_PERMISSIONS=(
   storage.buckets.list
 )
 
-command -v gcloud >/dev/null 2>&1 || { echo "ERROR: gcloud CLI not found on PATH."; exit 1; }
+command -v gcloud >/dev/null 2>&1 || { err "gcloud CLI not found on PATH."; exit 1; }
 
 # This script is interactive, so it needs to read prompts from the terminal even when
 # invoked as `curl ... | bash` — in that case bash's own stdin is the pipe carrying the
@@ -124,8 +145,8 @@ command -v gcloud >/dev/null 2>&1 || { echo "ERROR: gcloud CLI not found on PATH
 # /dev/tty instead of plain stdin. Fail fast with a clear message if there's no
 # controlling terminal to read from (e.g. running non-interactively in CI).
 if [[ ! -r /dev/tty ]]; then
-  echo "ERROR: this script is interactive and needs a terminal (/dev/tty) to read your" >&2
-  echo "answers from — it can't run non-interactively (e.g. piped in CI)." >&2
+  err "this script is interactive and needs a terminal (/dev/tty) to read your answers"
+  err "from — it can't run non-interactively (e.g. piped in CI)."
   exit 1
 fi
 
@@ -148,9 +169,9 @@ prompt() {
   printf -v "$__var_name" '%s' "$__input"
 }
 
-echo "================================================================================"
-echo "Lightbeam GCP data source service account setup"
-echo "================================================================================"
+rule
+banner "Lightbeam GCP data source service account setup"
+rule
 echo "This walks through picking which Lightbeam GCP data source type(s) you're"
 echo "onboarding, then creates a custom IAM role, a service account, binds them"
 echo "together (org-wide or per-project), and generates a key for Lightbeam to use."
@@ -173,10 +194,10 @@ add_permissions() {
   done
 }
 
-echo "Which Lightbeam data source type(s) / capabilities is this service account for?"
-echo "  1) Google Cloud Storage"
-echo "  2) BigQuery"
-echo "  3) Auto-discovery (read-only GCP resource discovery)"
+step "Which Lightbeam data source type(s) / capabilities is this service account for?"
+echo "  ${C_BOLD}1)${C_RESET} Google Cloud Storage"
+echo "  ${C_BOLD}2)${C_RESET} BigQuery"
+echo "  ${C_BOLD}3)${C_RESET} Auto-discovery (read-only GCP resource discovery)"
 while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
   read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice < /dev/tty
   IFS=',' read -r -a ds_selections <<< "$ds_choice"
@@ -196,11 +217,11 @@ while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
         SELECTED_LABELS+=("auto-discovery")
         ;;
       *)
-        echo "  Ignoring unrecognized option '$selection'."
+        warn "  Ignoring unrecognized option '$selection'."
         ;;
     esac
   done
-  [[ ${#SELECTED_LABELS[@]} -eq 0 ]] && echo "  Select at least one valid option."
+  [[ ${#SELECTED_LABELS[@]} -eq 0 ]] && warn "  Select at least one valid option."
 done
 
 LABELS_JOINED=$(IFS=+; echo "${SELECTED_LABELS[*]}")
@@ -262,22 +283,22 @@ ORG_ID=""
 PROJECT_IDS=()
 read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org < /dev/tty
 if [[ "$has_org" =~ ^[Yy]$ ]]; then
-  echo "Looking up the organization that owns project ${SA_PROJECT}..."
+  info "Looking up the organization that owns project ${SA_PROJECT}..."
   DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
   if [[ -n "$DETECTED_ORG_ID" ]]; then
     prompt ORG_ID "GCP organization ID" "$DETECTED_ORG_ID"
   else
-    echo "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
+    warn "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
     prompt ORG_ID "GCP organization ID"
   fi
 else
-  echo "No org-level access — the role will be bound on each project individually instead."
+  info "No org-level access — the role will be bound on each project individually instead."
   while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
     read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input < /dev/tty
     if [[ -n "$project_ids_input" ]]; then
       IFS=',' read -r -a PROJECT_IDS <<< "$project_ids_input"
     else
-      echo "  At least one project ID is required."
+      warn "  At least one project ID is required."
     fi
   done
 fi
@@ -310,7 +331,7 @@ retry() {
   for ((attempt = 1; attempt <= max_attempts; attempt++)); do
     "$@" && return 0
     if (( attempt < max_attempts )); then
-      echo "  (attempt ${attempt}/${max_attempts} failed — likely IAM propagation delay, retrying in ${delay}s...)"
+      warn "  (attempt ${attempt}/${max_attempts} failed — likely IAM propagation delay, retrying in ${delay}s...)"
       sleep "$delay"
     fi
   done
@@ -319,28 +340,29 @@ retry() {
 
 SA_EMAIL="${SA_NAME}@${SA_PROJECT}.iam.gserviceaccount.com"
 
-echo "================================================================================"
-$DRY_RUN && echo "[DRY RUN] Nothing below will actually be created/modified."
+rule
+$DRY_RUN && warn "[DRY RUN] Nothing below will actually be created/modified."
 echo "About to set up GCP data source access with the following gcloud identity:"
-gcloud config get-value account 2>/dev/null || true
-echo "--------------------------------------------------------------------------------"
-echo "  Data source type(s):  ${SELECTED_LABELS[*]}"
-echo "  Custom role:          ${ROLE_ID} (scope: $( [[ -n "$ORG_ID" ]] && echo "organization ${ORG_ID}" || echo "projects: ${PROJECT_IDS[*]}" ))"
-echo "  Service account:      ${SA_EMAIL} (hosted in project ${SA_PROJECT})"
-echo "  Permissions (${#PERMISSIONS[@]}): ${PERMISSIONS[*]}"
+info "  $(gcloud config get-value account 2>/dev/null || true)"
+printf '%s%s%s\n' "$C_DIM" "--------------------------------------------------------------------------------" "$C_RESET"
+field "Data source type(s)" "${SELECTED_LABELS[*]}"
+field "Custom role" "${ROLE_ID} (scope: $( [[ -n "$ORG_ID" ]] && echo "organization ${ORG_ID}" || echo "projects: ${PROJECT_IDS[*]}" ))"
+field "Service account" "${SA_EMAIL} (hosted in project ${SA_PROJECT})"
+field "Permissions (${#PERMISSIONS[@]})" "${PERMISSIONS[*]}"
 if [[ -n "$TOPIC_NAME" ]]; then
-  echo "  GCS notification topic: ${TOPIC_NAME} (project ${TOPIC_PROJECT}) — will grant the GCS service agent roles/pubsub.publisher"
+  field "GCS notification topic" "${TOPIC_NAME} (project ${TOPIC_PROJECT}) — will grant the GCS service agent roles/pubsub.publisher"
 fi
-echo "  Key output:           ${KEY_OUTPUT_FILE} (+ base64 at ${ENCODED_OUTPUT_FILE})"
-echo "================================================================================"
+field "Key output" "${KEY_OUTPUT_FILE} (+ base64 at ${ENCODED_OUTPUT_FILE})"
+rule
 if ! $DRY_RUN; then
   read -r -p "Proceed? [y/N] " confirm < /dev/tty
-  [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+  [[ "$confirm" =~ ^[Yy]$ ]] || { warn "Aborted."; exit 0; }
 fi
 
 # ---------------------------------------------------------------------------
 # 1. Custom role — org-level or per-project
 # ---------------------------------------------------------------------------
+step "▸ Step 1/5: Custom IAM role"
 PERMISSIONS_CSV=$(IFS=,; echo "${PERMISSIONS[*]}")
 
 create_or_update_role() {
@@ -348,14 +370,14 @@ create_or_update_role() {
   local describe_flag="$2"
 
   if gcloud iam roles describe "$ROLE_ID" $describe_flag >/dev/null 2>&1; then
-    echo "Role ${ROLE_ID} already exists ($scope_flag) — updating its permission list."
+    info "Role ${ROLE_ID} already exists ($scope_flag) — updating its permission list."
     run gcloud iam roles update "$ROLE_ID" $scope_flag \
       --title="$ROLE_TITLE" \
       --description="$ROLE_DESCRIPTION" \
       --permissions="$PERMISSIONS_CSV" \
       --stage=GA
   else
-    echo "Creating role ${ROLE_ID} ($scope_flag)."
+    info "Creating role ${ROLE_ID} ($scope_flag)."
     run gcloud iam roles create "$ROLE_ID" $scope_flag \
       --title="$ROLE_TITLE" \
       --description="$ROLE_DESCRIPTION" \
@@ -376,10 +398,11 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Service account — create once, reuse thereafter
 # ---------------------------------------------------------------------------
+step "▸ Step 2/5: Service account"
 if gcloud iam service-accounts describe "$SA_EMAIL" --project="$SA_PROJECT" >/dev/null 2>&1; then
-  echo "Service account ${SA_EMAIL} already exists — reusing it."
+  info "Service account ${SA_EMAIL} already exists — reusing it."
 else
-  echo "Creating service account ${SA_EMAIL}."
+  info "Creating service account ${SA_EMAIL}."
   run gcloud iam service-accounts create "$SA_NAME" \
     --project="$SA_PROJECT" \
     --display-name="Lightbeam ${LABELS_JOINED}"
@@ -388,15 +411,16 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Bind the role to the service account
 # ---------------------------------------------------------------------------
+step "▸ Step 3/5: IAM policy binding"
 if [[ -n "$ORG_ID" ]]; then
-  echo "Binding ${ROLE_RESOURCE} to ${SA_EMAIL} at organization ${ORG_ID}."
+  info "Binding ${ROLE_RESOURCE} to ${SA_EMAIL} at organization ${ORG_ID}."
   retry run gcloud organizations add-iam-policy-binding "$ORG_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${ROLE_RESOURCE}" \
     --condition=None
 else
   for project_id in "${PROJECT_IDS[@]}"; do
-    echo "Binding projects/${project_id}/roles/${ROLE_ID} to ${SA_EMAIL} on project ${project_id}."
+    info "Binding projects/${project_id}/roles/${ROLE_ID} to ${SA_EMAIL} on project ${project_id}."
     retry run gcloud projects add-iam-policy-binding "$project_id" \
       --member="serviceAccount:${SA_EMAIL}" \
       --role="projects/${project_id}/roles/${ROLE_ID}" \
@@ -421,16 +445,17 @@ gcs_service_agent_email() {
 }
 
 if [[ -n "$TOPIC_NAME" ]]; then
-  echo "Ensuring Pub/Sub topic '${TOPIC_NAME}' exists in project ${TOPIC_PROJECT}."
+  step "▸ Step 4/5: GCS bucket-notification topic"
+  info "Ensuring Pub/Sub topic '${TOPIC_NAME}' exists in project ${TOPIC_PROJECT}."
   if gcloud pubsub topics describe "$TOPIC_NAME" --project="$TOPIC_PROJECT" >/dev/null 2>&1; then
-    echo "Topic ${TOPIC_NAME} already exists."
+    info "Topic ${TOPIC_NAME} already exists."
   else
     run gcloud pubsub topics create "$TOPIC_NAME" --project="$TOPIC_PROJECT"
   fi
 
-  echo "Looking up the GCS service agent for project ${TOPIC_PROJECT}."
+  info "Looking up the GCS service agent for project ${TOPIC_PROJECT}."
   GCS_SERVICE_AGENT="$(gcs_service_agent_email "$TOPIC_PROJECT")"
-  echo "Granting roles/pubsub.publisher on ${TOPIC_NAME} to ${GCS_SERVICE_AGENT}."
+  info "Granting roles/pubsub.publisher on ${TOPIC_NAME} to ${GCS_SERVICE_AGENT}."
   # gcloud's own add-iam-policy-binding dedupes existing (role, member) pairs, so this
   # is safe to re-run without accumulating duplicate bindings.
   run gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
@@ -442,16 +467,17 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Key creation + base64 encoding (matches configuration["serviceAccountKey"] format)
 # ---------------------------------------------------------------------------
+step "▸ Step 5/5: Service account key"
 if $DRY_RUN; then
-  echo "[DRY RUN] would run: gcloud iam service-accounts keys create ${KEY_OUTPUT_FILE} --iam-account=${SA_EMAIL} --project=${SA_PROJECT}"
-  echo "[DRY RUN] would then base64-encode ${KEY_OUTPUT_FILE} into ${ENCODED_OUTPUT_FILE} (chmod 600 both)."
-  echo "================================================================================"
-  echo "[DRY RUN] complete — nothing was created or modified. Re-run without --dry-run to apply."
-  echo "================================================================================"
+  warn "[DRY RUN] would run: gcloud iam service-accounts keys create ${KEY_OUTPUT_FILE} --iam-account=${SA_EMAIL} --project=${SA_PROJECT}"
+  warn "[DRY RUN] would then base64-encode ${KEY_OUTPUT_FILE} into ${ENCODED_OUTPUT_FILE} (chmod 600 both)."
+  rule
+  warn "[DRY RUN] complete — nothing was created or modified. Re-run without --dry-run to apply."
+  rule
   exit 0
 fi
 
-echo "Creating a new JSON key for ${SA_EMAIL}."
+info "Creating a new JSON key for ${SA_EMAIL}."
 gcloud iam service-accounts keys create "$KEY_OUTPUT_FILE" \
   --iam-account="$SA_EMAIL" \
   --project="$SA_PROJECT"
@@ -461,14 +487,14 @@ chmod 600 "$KEY_OUTPUT_FILE"
 base64 < "$KEY_OUTPUT_FILE" | tr -d '\n' > "$ENCODED_OUTPUT_FILE"
 chmod 600 "$ENCODED_OUTPUT_FILE"
 
-echo "================================================================================"
-echo "Done."
-echo "  Data source type(s): ${SELECTED_LABELS[*]}"
-echo "  Service account:     ${SA_EMAIL}"
-echo "  Raw key:              ${KEY_OUTPUT_FILE}"
-echo "  Base64 key:           ${ENCODED_OUTPUT_FILE}  <- paste this into serviceAccountKey"
+rule
+success "✔ Done."
+field "Data source type(s)" "${SELECTED_LABELS[*]}"
+field "Service account" "$SA_EMAIL"
+field "Raw key" "$KEY_OUTPUT_FILE"
+field "Base64 key" "${ENCODED_OUTPUT_FILE}  <- paste this into serviceAccountKey"
 echo ""
-echo "Both files are chmod 600 and contain a live credential. Move the base64 content"
-echo "into Vault (or wherever this platform's configuration is stored) and then delete"
-echo "both local files — don't leave long-lived keys sitting on disk."
-echo "================================================================================"
+warn "Both files are chmod 600 and contain a live credential. Move the base64 content"
+warn "into Vault (or wherever this platform's configuration is stored) and then delete"
+warn "both local files — don't leave long-lived keys sitting on disk."
+rule
