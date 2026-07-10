@@ -296,6 +296,23 @@ run() {
   fi
 }
 
+# Retries a command a few times with backoff. Used around the IAM policy binding below:
+# a freshly-created service account is visible to the IAM API immediately but can take a
+# few seconds to propagate to the Resource Manager API that add-iam-policy-binding hits,
+# so the very next binding call can fail with "Service account ... does not exist" even
+# though the SA was just created successfully.
+retry() {
+  local attempt max_attempts=6 delay=5
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    "$@" && return 0
+    if (( attempt < max_attempts )); then
+      echo "  (attempt ${attempt}/${max_attempts} failed — likely IAM propagation delay, retrying in ${delay}s...)"
+      sleep "$delay"
+    fi
+  done
+  return 1
+}
+
 SA_EMAIL="${SA_NAME}@${SA_PROJECT}.iam.gserviceaccount.com"
 
 echo "================================================================================"
@@ -369,14 +386,14 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "$ORG_ID" ]]; then
   echo "Binding ${ROLE_RESOURCE} to ${SA_EMAIL} at organization ${ORG_ID}."
-  run gcloud organizations add-iam-policy-binding "$ORG_ID" \
+  retry run gcloud organizations add-iam-policy-binding "$ORG_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${ROLE_RESOURCE}" \
     --condition=None
 else
   for project_id in "${PROJECT_IDS[@]}"; do
     echo "Binding projects/${project_id}/roles/${ROLE_ID} to ${SA_EMAIL} on project ${project_id}."
-    run gcloud projects add-iam-policy-binding "$project_id" \
+    retry run gcloud projects add-iam-policy-binding "$project_id" \
       --member="serviceAccount:${SA_EMAIL}" \
       --role="projects/${project_id}/roles/${ROLE_ID}" \
       --condition=None
