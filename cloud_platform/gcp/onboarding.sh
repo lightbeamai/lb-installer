@@ -185,7 +185,7 @@ while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
     case "$selection" in
       1)
         add_permissions "${GCS_PERMISSIONS[@]}"
-        SELECTED_LABELS+=("google-cloud-storage")
+        SELECTED_LABELS+=("cloud-storage")
         ;;
       2)
         add_permissions "${BIGQUERY_PERMISSIONS[@]}"
@@ -217,7 +217,7 @@ DEFAULT_SA_NAME="${DEFAULT_SA_NAME:0:30}"
 DEFAULT_SA_NAME="${DEFAULT_SA_NAME%-}"
 
 # Builds a camelCase role ID suffix from hyphen/plus-delimited labels (e.g.
-# "google-cloud-storage+bigquery" -> "GoogleCloudStorageBigquery") using only portable
+# "cloud-storage+bigquery" -> "CloudStorageBigquery") using only portable
 # bash/tr, since sed's \U case-conversion is a GNU extension that silently no-ops on
 # BSD/macOS sed.
 build_role_id_suffix() {
@@ -233,13 +233,17 @@ build_role_id_suffix() {
 }
 DEFAULT_ROLE_ID="lightbeam$(build_role_id_suffix "$LABELS_JOINED")"
 
-prompt SA_PROJECT "GCP project ID to host the service account"
+# Offer the gcloud CLI's currently configured project as the default, if one is set
+# (gcloud prints the literal string "(unset)" instead of failing when it isn't).
+DETECTED_SA_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
+[[ "$DETECTED_SA_PROJECT" == "(unset)" ]] && DETECTED_SA_PROJECT=""
+prompt SA_PROJECT "GCP project ID to host the service account" "$DETECTED_SA_PROJECT"
 prompt SA_NAME "Service account name" "$DEFAULT_SA_NAME"
 prompt ROLE_ID "Custom IAM role ID" "$DEFAULT_ROLE_ID"
 
 TOPIC_PROJECT=""
 TOPIC_NAME=""
-if [[ " ${SELECTED_LABELS[*]} " == *" google-cloud-storage "* ]]; then
+if [[ " ${SELECTED_LABELS[*]} " == *" cloud-storage "* ]]; then
   prompt TOPIC_PROJECT "GCP project ID hosting the GCS bucket-notification Pub/Sub topic" "$SA_PROJECT"
   prompt TOPIC_NAME "Pub/Sub topic name used for GCS bucket notifications" "gc-storage-publisher-topic"
 fi
