@@ -347,10 +347,19 @@ ROLE_TITLE="Lightbeam ${LABELS_JOINED}"
 ROLE_DESCRIPTION="Lightbeam data source access for: ${SELECTED_LABELS[*]}."
 
 # GCP service account IDs must be 6-30 chars, lowercase letters/digits/hyphens only, and
-# can't end in a hyphen ('+' from LABELS_JOINED is invalid, and joining 2-3 labels easily
-# blows past 30 chars) — so build the default separately: hyphen-joined, then truncated
-# and trimmed of any trailing hyphen left by the cut.
-SA_LABELS_JOINED=$(IFS=-; echo "${SELECTED_LABELS[*]}")
+# can't end in a hyphen ('+' from LABELS_JOINED is invalid) — so build the default
+# separately from abbreviated data source codes (e.g. lightbeam-cs-bq-ad), truncated and
+# trimmed of any trailing hyphen left by the cut as a defensive fallback.
+declare -A DS_ABBREV=(
+  [cloud-storage]=cs
+  [bigquery]=bq
+  [auto-discovery]=ad
+)
+SA_LABEL_ABBREVS=()
+for label in "${SELECTED_LABELS[@]}"; do
+  SA_LABEL_ABBREVS+=("${DS_ABBREV[$label]}")
+done
+SA_LABELS_JOINED=$(IFS=-; echo "${SA_LABEL_ABBREVS[*]}")
 DEFAULT_SA_NAME="lightbeam-${SA_LABELS_JOINED}"
 DEFAULT_SA_NAME="${DEFAULT_SA_NAME:0:30}"
 DEFAULT_SA_NAME="${DEFAULT_SA_NAME%-}"

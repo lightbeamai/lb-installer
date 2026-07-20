@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Lightbeam GCP — Command Builder</title>
+<title>GCP Onboarding — Command Builder</title>
 <style>
   :root{
     --bg:#0d1117;
@@ -143,7 +143,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="dot"></span>lightbeam-gcp.sh command builder</h1>
+  <h1><span class="dot"></span>GCP onboarding command builder</h1>
   <p class="subtitle">Pick data source types and fill in the IDs — the equivalent flag-driven command updates live below. The script also still runs fully interactively with no flags at all.</p>
 
   <section>
@@ -157,29 +157,35 @@
       <div>
         <label class="field">GCP project ID to host the service account <span style="color:var(--text-dim)">(--sa-project)</span></label>
         <input type="text" id="saProject" placeholder="e.g. my-gcp-project"/>
+        <p class="hint">Default: gcloud's currently active project (whatever `gcloud config get-value project` returns on the machine running the script).</p>
       </div>
       <div>
         <label class="field">Service account name <span style="color:var(--text-dim)">(--sa-name)</span></label>
         <input type="text" id="saName" placeholder=""/>
+        <p class="hint">Default: auto-filled below as <code>lightbeam-&lt;abbreviated-data-sources&gt;</code> (e.g. <code>lightbeam-cs-bq</code>) once you pick data source type(s) above — edit to override.</p>
       </div>
       <div>
         <label class="field">Custom IAM role ID <span style="color:var(--text-dim)">(--role-id)</span></label>
         <input type="text" id="roleId" placeholder=""/>
+        <p class="hint">Default: auto-filled below as <code>lightbeam&lt;DataSources&gt;</code> once you pick data source type(s) above — edit to override.</p>
       </div>
       <div>
         <label class="field">JSON key output path <span style="color:var(--text-dim)">(--key-output-file)</span></label>
         <input type="text" id="keyOutputFile" placeholder="service-account-key.json"/>
+        <p class="hint">Default: <code>service-account-key.json</code> in the current directory if left blank.</p>
       </div>
     </div>
     <div id="topicFields" style="display:none;">
       <div class="grid2">
         <div>
           <label class="field">Pub/Sub topic project <span style="color:var(--text-dim)">(--topic-project)</span></label>
-          <input type="text" id="topicProject" placeholder="defaults to --sa-project"/>
+          <input type="text" id="topicProject" placeholder="e.g. my-gcp-project"/>
+          <p class="hint">Default: same as --sa-project if left blank.</p>
         </div>
         <div>
           <label class="field">Pub/Sub topic name <span style="color:var(--text-dim)">(--topic-name)</span></label>
-          <input type="text" id="topicName" placeholder="gc-storage-publisher-topic"/>
+          <input type="text" id="topicName" placeholder="e.g. gc-storage-publisher-topic"/>
+          <p class="hint">Default: <code>gc-storage-publisher-topic</code> if left blank.</p>
         </div>
       </div>
     </div>
@@ -202,6 +208,7 @@
     <h2>4 · Run behavior</h2>
     <label class="field">Script URL (raw)</label>
     <input type="text" id="scriptUrl" value="https://raw.githubusercontent.com/lightbeamai/lb-installer/master/cloud_platform/gcp/onboarding.sh"/>
+    <p class="hint">Default: raw onboarding.sh on the master branch — point this at another branch/tag while testing.</p>
     <div id="flagsList"></div>
   </section>
 
@@ -235,9 +242,10 @@ function orderedLabels(){
   // preserve canonical order (matches the script's own listed order)
   return DS_OPTIONS.map(o=>o.id).filter(id=>state.ds.has(id));
 }
+const DS_ABBREV = {'cloud-storage':'cs', 'bigquery':'bq', 'auto-discovery':'ad'};
 function defaultSaName(labels){
   if (!labels.length) return '';
-  let name = 'lightbeam-' + labels.join('-');
+  let name = 'lightbeam-' + labels.map(l=>DS_ABBREV[l]).join('-');
   name = name.slice(0,30);
   name = name.replace(/-+$/,'');
   return name;
