@@ -38,6 +38,11 @@
 # base64-encoded copy next to it (<path>.b64, ready to paste into Lightbeam's
 # serviceAccountKey field / Vault). Both are chmod 600. Treat both as secrets — delete
 # the local copies once they're safely stored in Vault.
+#
+# Every answer below can also be supplied as a flag (see --help), so the whole run can be
+# scripted/embedded. Run with no flags at all and it behaves exactly as before: fully
+# interactive. Anything not given as a flag falls back to a prompt, as long as a terminal
+# is attached; running fully-flagged (plus --yes) needs no terminal at all.
 
 set -euo pipefail
 
@@ -137,26 +142,117 @@ DISCOVERY_PERMISSIONS=(
   storage.buckets.list
 )
 
-command -v gcloud >/dev/null 2>&1 || { err "gcloud CLI not found on PATH."; exit 1; }
+# ---------------------------------------------------------------------------
+# Command-line flags (all optional) — anything not given here falls back to an
+# interactive prompt below, as long as a terminal is attached.
+# ---------------------------------------------------------------------------
+USAGE="$(cat <<'USAGE_EOF'
+Lightbeam GCP data source service account setup
 
-# This script is interactive, so it needs to read prompts from the terminal even when
-# invoked as `curl ... | bash` — in that case bash's own stdin is the pipe carrying the
-# rest of the script source, not the keyboard, so every `read` below is pinned to
-# /dev/tty instead of plain stdin. Fail fast with a clear message if there's no
-# controlling terminal to read from (e.g. running non-interactively in CI).
-if [[ ! -r /dev/tty ]]; then
-  err "this script is interactive and needs a terminal (/dev/tty) to read your answers"
-  err "from — it can't run non-interactively (e.g. piped in CI)."
+Usage:
+  lightbeam-gcp.sh [options]
+
+Run with no flags at all for the original fully-interactive experience. Any
+value below can be pre-filled with a flag instead of being prompted for, which
+is what lets this be driven from a generated command (e.g. an embedded form):
+
+  lightbeam-gcp.sh \
+    --data-sources=cloud-storage,bigquery \
+    --sa-project=my-project \
+    --org-id=123456789012 \
+    --yes
+
+Options:
+  --data-sources=<list>      Comma-separated data source types to onboard:
+                              cloud-storage (aka gcs/storage/1), bigquery
+                              (aka bq/2), auto-discovery (aka discovery/3).
+                              Multiple allowed, e.g. cloud-storage,bigquery
+  --sa-project=<id>          GCP project ID to host the service account
+                              [default: gcloud's currently configured project]
+  --sa-name=<name>           Service account name
+                              [default: lightbeam-<data-sources>]
+  --role-id=<id>             Custom IAM role ID
+                              [default: lightbeam<DataSources>]
+  --topic-project=<id>       GCP project hosting the GCS bucket-notification
+                              Pub/Sub topic (only used with cloud-storage)
+                              [default: same as --sa-project]
+  --topic-name=<name>        Pub/Sub topic name for GCS bucket notifications
+                              [default: gc-storage-publisher-topic]
+  --org-id=<id>              Bind the role once at this GCP organization
+                              (mutually exclusive with --project-ids)
+  --project-ids=<list>       Comma-separated project IDs to bind the role to
+                              individually (mutually exclusive with --org-id)
+  --key-output-file=<path>   Path to write the JSON key to
+                              [default: service-account-key.json]
+  --dry-run                  Print the gcloud commands without making any
+                              changes (skips the interactive dry-run prompt)
+  --yes, -y                  Skip the final confirmation prompt
+  -h, --help                 Show this help and exit
+USAGE_EOF
+)"
+
+DS_ARG=""
+SA_PROJECT="${SA_PROJECT:-}"
+SA_NAME=""
+ROLE_ID=""
+TOPIC_PROJECT=""
+TOPIC_NAME=""
+ORG_ID=""
+PROJECT_IDS_ARG=""
+KEY_OUTPUT_FILE=""
+DRY_RUN=false
+ASSUME_YES=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --data-sources=*) DS_ARG="${1#*=}"; shift ;;
+    --data-sources) DS_ARG="${2:-}"; shift 2 ;;
+    --sa-project=*) SA_PROJECT="${1#*=}"; shift ;;
+    --sa-project) SA_PROJECT="${2:-}"; shift 2 ;;
+    --sa-name=*) SA_NAME="${1#*=}"; shift ;;
+    --sa-name) SA_NAME="${2:-}"; shift 2 ;;
+    --role-id=*) ROLE_ID="${1#*=}"; shift ;;
+    --role-id) ROLE_ID="${2:-}"; shift 2 ;;
+    --topic-project=*) TOPIC_PROJECT="${1#*=}"; shift ;;
+    --topic-project) TOPIC_PROJECT="${2:-}"; shift 2 ;;
+    --topic-name=*) TOPIC_NAME="${1#*=}"; shift ;;
+    --topic-name) TOPIC_NAME="${2:-}"; shift 2 ;;
+    --org-id=*) ORG_ID="${1#*=}"; shift ;;
+    --org-id) ORG_ID="${2:-}"; shift 2 ;;
+    --project-ids=*) PROJECT_IDS_ARG="${1#*=}"; shift ;;
+    --project-ids) PROJECT_IDS_ARG="${2:-}"; shift 2 ;;
+    --key-output-file=*) KEY_OUTPUT_FILE="${1#*=}"; shift ;;
+    --key-output-file) KEY_OUTPUT_FILE="${2:-}"; shift 2 ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --yes|-y) ASSUME_YES=true; shift ;;
+    -h|--help) echo "$USAGE"; exit 0 ;;
+    *) err "Unrecognized argument: $1"; echo "$USAGE" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -n "$ORG_ID" && -n "$PROJECT_IDS_ARG" ]]; then
+  err "--org-id and --project-ids are mutually exclusive."
   exit 1
 fi
 
+HAVE_TTY=false
+{ : < /dev/tty; } 2>/dev/null && HAVE_TTY=true
+
+command -v gcloud >/dev/null 2>&1 || { err "gcloud CLI not found on PATH."; exit 1; }
+
 # ---------------------------------------------------------------------------
-# Interactive prompts
+# Interactive prompts (used only for whatever wasn't supplied as a flag)
 # ---------------------------------------------------------------------------
 # prompt VAR "question text" ["default"]
 # Blank default means the field is required and re-prompts until non-empty.
+# Only ever called when HAVE_TTY is true — call sites below guard on that.
 prompt() {
   local __var_name="$1" __question="$2" __default="${3:-}" __input
+  if ! $HAVE_TTY; then
+    err "Missing a value for '$__question' and no terminal is attached to prompt for it."
+    err "Pass it as a flag instead — see --help."
+    exit 1
+  fi
   if [[ -n "$__default" ]]; then
     read -r -p "$__question [$__default]: " __input < /dev/tty
     __input="${__input:-$__default}"
@@ -194,35 +290,57 @@ add_permissions() {
   done
 }
 
-step "Which Lightbeam data source type(s) / capabilities is this service account for?"
-echo "  ${C_BOLD}1)${C_RESET} Google Cloud Storage"
-echo "  ${C_BOLD}2)${C_RESET} BigQuery"
-echo "  ${C_BOLD}3)${C_RESET} Auto-discovery (read-only GCP resource discovery)"
-while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
-  read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice < /dev/tty
-  IFS=',' read -r -a ds_selections <<< "$ds_choice"
+# Accepts one token (number or name) for a single data source selection and
+# applies it, used both by --data-sources parsing and the interactive loop.
+apply_data_source_token() {
+  local selection="$1"
+  case "$selection" in
+    1|gcs|storage|cloud-storage)
+      add_permissions "${GCS_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("cloud-storage")
+      ;;
+    2|bq|bigquery)
+      add_permissions "${BIGQUERY_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("bigquery")
+      ;;
+    3|discovery|auto-discovery)
+      add_permissions "${DISCOVERY_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("auto-discovery")
+      ;;
+    *)
+      warn "  Ignoring unrecognized data source '$selection'."
+      ;;
+  esac
+}
+
+if [[ -n "$DS_ARG" ]]; then
+  IFS=',' read -r -a ds_selections <<< "$DS_ARG"
   for selection in "${ds_selections[@]}"; do
     selection="$(echo "$selection" | tr -d '[:space:]')"
-    case "$selection" in
-      1)
-        add_permissions "${GCS_PERMISSIONS[@]}"
-        SELECTED_LABELS+=("cloud-storage")
-        ;;
-      2)
-        add_permissions "${BIGQUERY_PERMISSIONS[@]}"
-        SELECTED_LABELS+=("bigquery")
-        ;;
-      3)
-        add_permissions "${DISCOVERY_PERMISSIONS[@]}"
-        SELECTED_LABELS+=("auto-discovery")
-        ;;
-      *)
-        warn "  Ignoring unrecognized option '$selection'."
-        ;;
-    esac
+    apply_data_source_token "$selection"
   done
-  [[ ${#SELECTED_LABELS[@]} -eq 0 ]] && warn "  Select at least one valid option."
-done
+  if [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; then
+    err "No valid data source types found in --data-sources='$DS_ARG'. See --help."
+    exit 1
+  fi
+elif $HAVE_TTY; then
+  step "Which Lightbeam data source type(s) / capabilities is this service account for?"
+  echo "  ${C_BOLD}1)${C_RESET} Google Cloud Storage"
+  echo "  ${C_BOLD}2)${C_RESET} BigQuery"
+  echo "  ${C_BOLD}3)${C_RESET} Auto-discovery (read-only GCP resource discovery)"
+  while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
+    read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice < /dev/tty
+    IFS=',' read -r -a ds_selections <<< "$ds_choice"
+    for selection in "${ds_selections[@]}"; do
+      selection="$(echo "$selection" | tr -d '[:space:]')"
+      apply_data_source_token "$selection"
+    done
+    [[ ${#SELECTED_LABELS[@]} -eq 0 ]] && warn "  Select at least one valid option."
+  done
+else
+  err "No data source specified. Use --data-sources (see --help)."
+  exit 1
+fi
 
 LABELS_JOINED=$(IFS=+; echo "${SELECTED_LABELS[*]}")
 ROLE_TITLE="Lightbeam ${LABELS_JOINED}"
@@ -258,15 +376,38 @@ DEFAULT_ROLE_ID="lightbeam$(build_role_id_suffix "$LABELS_JOINED")"
 # (gcloud prints the literal string "(unset)" instead of failing when it isn't).
 DETECTED_SA_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
 [[ "$DETECTED_SA_PROJECT" == "(unset)" ]] && DETECTED_SA_PROJECT=""
-prompt SA_PROJECT "GCP project ID to host the service account" "$DETECTED_SA_PROJECT"
-prompt SA_NAME "Service account name" "$DEFAULT_SA_NAME"
-prompt ROLE_ID "Custom IAM role ID" "$DEFAULT_ROLE_ID"
 
-TOPIC_PROJECT=""
-TOPIC_NAME=""
+if [[ -z "$SA_PROJECT" ]]; then
+  if $HAVE_TTY; then
+    prompt SA_PROJECT "GCP project ID to host the service account" "$DETECTED_SA_PROJECT"
+  elif [[ -n "$DETECTED_SA_PROJECT" ]]; then
+    SA_PROJECT="$DETECTED_SA_PROJECT"
+    info "Using gcloud's configured project for --sa-project: $SA_PROJECT"
+  else
+    err "--sa-project is required (no terminal attached to prompt, and no gcloud default project set)."
+    exit 1
+  fi
+fi
+
+if [[ -z "$SA_NAME" ]]; then
+  if $HAVE_TTY; then prompt SA_NAME "Service account name" "$DEFAULT_SA_NAME"
+  else SA_NAME="$DEFAULT_SA_NAME"; fi
+fi
+
+if [[ -z "$ROLE_ID" ]]; then
+  if $HAVE_TTY; then prompt ROLE_ID "Custom IAM role ID" "$DEFAULT_ROLE_ID"
+  else ROLE_ID="$DEFAULT_ROLE_ID"; fi
+fi
+
 if [[ " ${SELECTED_LABELS[*]} " == *" cloud-storage "* ]]; then
-  prompt TOPIC_PROJECT "GCP project ID hosting the GCS bucket-notification Pub/Sub topic" "$SA_PROJECT"
-  prompt TOPIC_NAME "Pub/Sub topic name used for GCS bucket notifications" "gc-storage-publisher-topic"
+  if [[ -z "$TOPIC_PROJECT" ]]; then
+    if $HAVE_TTY; then prompt TOPIC_PROJECT "GCP project ID hosting the GCS bucket-notification Pub/Sub topic" "$SA_PROJECT"
+    else TOPIC_PROJECT="$SA_PROJECT"; fi
+  fi
+  if [[ -z "$TOPIC_NAME" ]]; then
+    if $HAVE_TTY; then prompt TOPIC_NAME "Pub/Sub topic name used for GCS bucket notifications" "gc-storage-publisher-topic"
+    else TOPIC_NAME="gc-storage-publisher-topic"; fi
+  fi
 fi
 
 # Walks the project's resource hierarchy (project -> folder(s) -> organization) to find
@@ -279,36 +420,49 @@ detect_org_id() {
     | awk '$2 == "organization" { print $1; exit }'
 }
 
-ORG_ID=""
 PROJECT_IDS=()
-read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org < /dev/tty
-if [[ "$has_org" =~ ^[Yy]$ ]]; then
-  info "Looking up the organization that owns project ${SA_PROJECT}..."
-  DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
-  if [[ -n "$DETECTED_ORG_ID" ]]; then
-    prompt ORG_ID "GCP organization ID" "$DETECTED_ORG_ID"
+if [[ -n "$ORG_ID" ]]; then
+  info "Using organization ID from --org-id: $ORG_ID"
+elif [[ -n "$PROJECT_IDS_ARG" ]]; then
+  IFS=',' read -r -a PROJECT_IDS <<< "$PROJECT_IDS_ARG"
+  info "Using project IDs from --project-ids: ${PROJECT_IDS[*]}"
+elif $HAVE_TTY; then
+  read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org < /dev/tty
+  if [[ "$has_org" =~ ^[Yy]$ ]]; then
+    info "Looking up the organization that owns project ${SA_PROJECT}..."
+    DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
+    if [[ -n "$DETECTED_ORG_ID" ]]; then
+      prompt ORG_ID "GCP organization ID" "$DETECTED_ORG_ID"
+    else
+      warn "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
+      prompt ORG_ID "GCP organization ID"
+    fi
   else
-    warn "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
-    prompt ORG_ID "GCP organization ID"
+    info "No org-level access — the role will be bound on each project individually instead."
+    while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
+      read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input < /dev/tty
+      if [[ -n "$project_ids_input" ]]; then
+        IFS=',' read -r -a PROJECT_IDS <<< "$project_ids_input"
+      else
+        warn "  At least one project ID is required."
+      fi
+    done
   fi
 else
-  info "No org-level access — the role will be bound on each project individually instead."
-  while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
-    read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input < /dev/tty
-    if [[ -n "$project_ids_input" ]]; then
-      IFS=',' read -r -a PROJECT_IDS <<< "$project_ids_input"
-    else
-      warn "  At least one project ID is required."
-    fi
-  done
+  err "Specify either --org-id or --project-ids (no terminal attached to ask). See --help."
+  exit 1
 fi
 
-prompt KEY_OUTPUT_FILE "Path to write the JSON key to" "service-account-key.json"
+if [[ -z "$KEY_OUTPUT_FILE" ]]; then
+  if $HAVE_TTY; then prompt KEY_OUTPUT_FILE "Path to write the JSON key to" "service-account-key.json"
+  else KEY_OUTPUT_FILE="service-account-key.json"; fi
+fi
 ENCODED_OUTPUT_FILE="${KEY_OUTPUT_FILE}.b64"
 
-DRY_RUN=false
-read -r -p "Dry run only — print the gcloud commands without making any changes? [y/N] " dry_run_answer < /dev/tty
-[[ "$dry_run_answer" =~ ^[Yy]$ ]] && DRY_RUN=true
+if ! $DRY_RUN && $HAVE_TTY && ! $ASSUME_YES; then
+  read -r -p "Dry run only — print the gcloud commands without making any changes? [y/N] " dry_run_answer < /dev/tty
+  [[ "$dry_run_answer" =~ ^[Yy]$ ]] && DRY_RUN=true
+fi
 
 # Prints the command instead of running it when dry-run was chosen. Only wraps mutating
 # gcloud calls — the read-only "describe" checks below always run for real so the
@@ -355,8 +509,15 @@ fi
 field "Key output" "${KEY_OUTPUT_FILE} (+ base64 at ${ENCODED_OUTPUT_FILE})"
 rule
 if ! $DRY_RUN; then
-  read -r -p "Proceed? [y/N] " confirm < /dev/tty
-  [[ "$confirm" =~ ^[Yy]$ ]] || { warn "Aborted."; exit 0; }
+  if $ASSUME_YES; then
+    info "Skipping confirmation (--yes)."
+  elif $HAVE_TTY; then
+    read -r -p "Proceed? [y/N] " confirm < /dev/tty
+    [[ "$confirm" =~ ^[Yy]$ ]] || { warn "Aborted."; exit 0; }
+  else
+    err "Refusing to proceed without confirmation: no terminal attached and --yes not given."
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
