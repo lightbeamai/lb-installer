@@ -1,8 +1,32 @@
 #!/usr/bin/env bash
+#
+# Sets up a Lightbeam Kubernetes control-plane node on RHEL (Docker, Kubernetes, Calico,
+# and the lightbeam.service systemd unit that port-forwards the Kong proxy on 80/443).
+#
+# Usage:
+#   sudo bash master.sh [--hostname=<host>]
+#
+#   --hostname=<host>  Optional. The Lightbeam endpoint hostname for this cluster (the
+#                       hostname Lightbeam is reached at).
 
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root."
   exit
+fi
+
+# Optional Lightbeam endpoint hostname for this cluster — see usage note above. Only
+# consumed downstream by lightbeam.sh's health check; capturing it here is the point.
+LB_HOSTNAME=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hostname=*) LB_HOSTNAME="${1#*=}"; shift ;;
+    --hostname) LB_HOSTNAME="${2:-}"; shift 2 ;;
+    *) echo "Unrecognized argument: $1" >&2; exit 1 ;;
+  esac
+done
+if [[ -n "$LB_HOSTNAME" && ! "$LB_HOSTNAME" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "Invalid --hostname value: $LB_HOSTNAME" >&2
+  exit 1
 fi
 
 sudo yum update -y
@@ -253,6 +277,13 @@ PID2=$!
 
 /bin/systemd-notify --ready
 
+# LB_HOSTNAME_HEADER is filled in below (sed) from master.sh's --hostname flag, if given.
+LB_HOSTNAME_HEADER="__LB_HOSTNAME__"
+CURL_HOST_ARGS=()
+if [[ -n "$LB_HOSTNAME_HEADER" ]]; then
+  CURL_HOST_ARGS=(-H "Host: $LB_HOSTNAME_HEADER")
+fi
+
 while true; do
     FAIL=0
 
@@ -262,7 +293,7 @@ while true; do
     kill -0 $PID2
     if [[ $? -ne 0 ]]; then FAIL=1; fi
 
-    status_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_HOST_ARGS[@]}" http://localhost/api/health)
     echo "Lightbeam cluster health check: $status_code"
     if [[ $? -ne 0 || $status_code -ne 200 ]]; then FAIL=1; fi
 
@@ -271,6 +302,8 @@ while true; do
     sleep 1
 done
 EOF
+
+sed -i "s|__LB_HOSTNAME__|${LB_HOSTNAME}|" /usr/local/bin/lightbeam.sh
 
 echo "Script /usr/local/bin/lightbeam.sh has been created."
 chmod ugo+x /usr/local/bin/lightbeam.sh

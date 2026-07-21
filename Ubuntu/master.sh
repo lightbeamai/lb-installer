@@ -1,8 +1,32 @@
 #!/usr/bin/env bash
+#
+# Sets up a Lightbeam Kubernetes control-plane node on Ubuntu (Docker, Kubernetes, Calico,
+# and the lightbeam.service systemd unit that port-forwards the Kong proxy on 80/443).
+#
+# Usage:
+#   sudo bash master.sh [--hostname=<host>]
+#
+#   --hostname=<host>  Optional. The Lightbeam endpoint hostname for this cluster (the
+#                       hostname Lightbeam is reached at).
 
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root."
   exit
+fi
+
+# Optional Lightbeam endpoint hostname for this cluster — see usage note above. Only
+# consumed downstream by lightbeam.sh's health check; capturing it here is the point.
+LB_HOSTNAME=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hostname=*) LB_HOSTNAME="${1#*=}"; shift ;;
+    --hostname) LB_HOSTNAME="${2:-}"; shift 2 ;;
+    *) echo "Unrecognized argument: $1" >&2; exit 1 ;;
+  esac
+done
+if [[ -n "$LB_HOSTNAME" && ! "$LB_HOSTNAME" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "Invalid --hostname value: $LB_HOSTNAME" >&2
+  exit 1
 fi
 
 TIMEOUT=300
@@ -410,12 +434,19 @@ PID=$!
 
 /bin/systemd-notify --ready
 
+# LB_HOSTNAME_HEADER is filled in below (sed) from master.sh's --hostname flag, if given.
+LB_HOSTNAME_HEADER="__LB_HOSTNAME__"
+CURL_HOST_ARGS=()
+if [[ -n "$LB_HOSTNAME_HEADER" ]]; then
+  CURL_HOST_ARGS=(-H "Host: $LB_HOSTNAME_HEADER")
+fi
+
 while(true); do
     FAIL=0
     kill -0 $PID
     if [[ $? -ne 0 ]]; then FAIL=1; fi
 
-    status_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health)
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" "${CURL_HOST_ARGS[@]}" http://localhost/api/health)
     curl_exit=$?
     echo "Lightbeam cluster health check: $status_code (curl exit: $curl_exit)"
     if [[ $curl_exit -ne 0 || ( $status_code -ne 200 && $status_code -ne 301 ) ]]; then
@@ -426,6 +457,7 @@ while(true); do
     sleep 1
 done
 EOF
+sed -i "s|__LB_HOSTNAME__|${LB_HOSTNAME}|" /usr/local/bin/lightbeam.sh
 chmod ugo+x /usr/local/bin/lightbeam.sh
 
 tee /etc/systemd/system/lightbeam.service > /dev/null <<'EOF'
