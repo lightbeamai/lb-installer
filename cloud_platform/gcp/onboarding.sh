@@ -44,7 +44,7 @@
 # interactive. Anything not given as a flag falls back to a prompt, as long as a terminal
 # is attached; running fully-flagged (plus --yes) needs no terminal at all.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 # ---------------------------------------------------------------------------
 # Color helpers — only emit ANSI escapes to a real terminal, and respect
@@ -66,6 +66,39 @@ success() { printf '%s%s%s\n' "$C_GREEN" "$*" "$C_RESET"; }
 warn()    { printf '%s%s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
 err()     { printf '%sERROR:%s %s\n' "$C_RED$C_BOLD" "$C_RESET$C_RED" "$*$C_RESET" >&2; }
 field()   { printf '  %s%-24s%s%s\n' "$C_BOLD" "$1:" "$C_RESET" "$2"; }
+
+# ---------------------------------------------------------------------------
+# Runs a gcloud command, capturing its combined output so a failure's actual
+# error text is guaranteed to print right next to the script's own guidance
+# (added by the ERR trap below) instead of scrolling past. Returns gcloud's
+# real exit code rather than exiting itself, so callers like retry() below
+# still get to decide whether to retry or let it propagate.
+# ---------------------------------------------------------------------------
+gcloud_run() {
+  local output ret=0
+  output=$(gcloud "$@" 2>&1) || ret=$?
+  if [[ $ret -ne 0 ]]; then
+    err "gcloud $* failed (exit ${ret}):"
+  fi
+  [[ -n "$output" ]] && printf '%s\n' "$output"
+  return "$ret"
+}
+
+# Fires once, on whatever command ultimately fails and is left untested (i.e.
+# set -e would abort here) — including a retry() call after it has exhausted
+# every attempt. Pairs the raw failure (already printed above by gcloud_run /
+# retry's own error line) with the same actionable guidance Wiz's onboarding
+# script gives, instead of just dying silently.
+on_command_failure() {
+  local exit_code=$?
+  rule >&2
+  err "Exiting (exit ${exit_code}) — see the error above."
+  err "If this looks like a permission error, confirm the identity below has enough IAM admin rights"
+  err "(custom-role admin at the org/project, service account admin, and IAM security admin) — see the"
+  err "pre-flight permission check above for what's missing. Otherwise, contact Lightbeam support."
+  exit "$exit_code"
+}
+trap on_command_failure ERR
 
 # ---------------------------------------------------------------------------
 # Permission sets per supported data source type
@@ -480,7 +513,7 @@ run() {
   if $DRY_RUN; then
     echo "[DRY RUN] would run: $*"
   else
-    "$@"
+    gcloud_run "${@:2}"   # $1 is always the literal "gcloud" at every call site
   fi
 }
 
@@ -498,15 +531,77 @@ retry() {
       sleep "$delay"
     fi
   done
+  err "All ${max_attempts} attempts failed: $*"
   return 1
 }
 
 SA_EMAIL="${SA_NAME}@${SA_PROJECT}.iam.gserviceaccount.com"
+ACTIVE_ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
+
+# ---------------------------------------------------------------------------
+# Pre-flight: does the active identity actually have enough IAM admin rights
+# to do the rest of this script? Best-effort — checks for the specific
+# predefined roles below (or roles/owner) via direct IAM policy bindings, at
+# the org (if --org-id) or otherwise --sa-project as a representative scope.
+# A custom/aggregate role granting equivalent permissions won't be detected,
+# so this warns and asks for confirmation rather than hard-blocking.
+# ---------------------------------------------------------------------------
+step "▸ Pre-flight: checking IAM admin permissions"
+if [[ -z "$ACTIVE_ACCOUNT" ]]; then
+  warn "  Couldn't determine the active gcloud identity (gcloud config get-value account) — skipping the permission check."
+else
+  PERM_CHECK_KIND="projects"
+  PERM_CHECK_ID="$SA_PROJECT"
+  if [[ -n "$ORG_ID" ]]; then
+    PERM_CHECK_KIND="organizations"
+    PERM_CHECK_ID="$ORG_ID"
+  fi
+
+  has_role_binding() {
+    local role="$1"
+    gcloud "$PERM_CHECK_KIND" get-iam-policy "$PERM_CHECK_ID" \
+      --flatten="bindings[].members" \
+      --format="value(bindings.role)" \
+      --filter="bindings.members=user:${ACTIVE_ACCOUNT}" 2>/dev/null | grep -qx "$role"
+  }
+
+  MISSING_ROLES=()
+  if has_role_binding "roles/owner"; then
+    info "  ${ACTIVE_ACCOUNT} has roles/owner on ${PERM_CHECK_KIND%s} ${PERM_CHECK_ID} — sufficient."
+  else
+    has_role_binding "roles/iam.organizationRoleAdmin" || has_role_binding "roles/iam.roleAdmin" \
+      || MISSING_ROLES+=("roles/iam.organizationRoleAdmin (org) or roles/iam.roleAdmin (project) — create/update the custom IAM role")
+    has_role_binding "roles/iam.serviceAccountAdmin" \
+      || MISSING_ROLES+=("roles/iam.serviceAccountAdmin — create the service account and its key")
+    has_role_binding "roles/resourcemanager.organizationAdmin" || has_role_binding "roles/iam.securityAdmin" \
+      || MISSING_ROLES+=("roles/resourcemanager.organizationAdmin (org) or roles/iam.securityAdmin (project) — bind the role to the service account")
+  fi
+
+  if [[ ${#MISSING_ROLES[@]} -eq 0 ]]; then
+    success "  PASS — ${ACTIVE_ACCOUNT} appears to have sufficient IAM admin rights on ${PERM_CHECK_KIND%s} ${PERM_CHECK_ID}."
+  else
+    warn "  ${ACTIVE_ACCOUNT} is missing direct bindings for (best-effort check — custom/aggregate roles granting"
+    warn "  equivalent permissions won't be detected here):"
+    for role in "${MISSING_ROLES[@]}"; do warn "    - $role"; done
+    if [[ -z "$ORG_ID" && ${#PROJECT_IDS[@]} -gt 1 ]]; then
+      warn "  (checked only against ${PERM_CHECK_ID} as a representative project — other --project-ids entries aren't individually checked.)"
+    fi
+    if $ASSUME_YES; then
+      warn "  Continuing anyway due to --yes."
+    elif $HAVE_TTY; then
+      read -r -p "  Continue anyway? [y/N] " continue_answer < /dev/tty
+      [[ "$continue_answer" =~ ^[Yy]$ ]] || { err "Aborted — insufficient permissions."; exit 1; }
+    else
+      err "  Refusing to proceed without confirmation: no terminal attached and --yes not given."
+      exit 1
+    fi
+  fi
+fi
 
 rule
 $DRY_RUN && warn "[DRY RUN] Nothing below will actually be created/modified."
 echo "About to set up GCP data source access with the following gcloud identity:"
-info "  $(gcloud config get-value account 2>/dev/null || true)"
+info "  $ACTIVE_ACCOUNT"
 printf '%s%s%s\n' "$C_DIM" "--------------------------------------------------------------------------------" "$C_RESET"
 field "Data source type(s)" "${SELECTED_LABELS[*]}"
 field "Custom role" "${ROLE_ID} (scope: $( [[ -n "$ORG_ID" ]] && echo "organization ${ORG_ID}" || echo "projects: ${PROJECT_IDS[*]}" ))"
@@ -648,7 +743,7 @@ if $DRY_RUN; then
 fi
 
 info "Creating a new JSON key for ${SA_EMAIL}."
-gcloud iam service-accounts keys create "$KEY_OUTPUT_FILE" \
+gcloud_run iam service-accounts keys create "$KEY_OUTPUT_FILE" \
   --iam-account="$SA_EMAIL" \
   --project="$SA_PROJECT"
 chmod 600 "$KEY_OUTPUT_FILE"
