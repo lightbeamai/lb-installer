@@ -1,0 +1,765 @@
+#!/usr/bin/env bash
+#
+# Creates (or reuses) everything a customer's GCP project needs to onboard one or more
+# Lightbeam data source types:
+#   1. A custom IAM role containing exactly the permissions the selected data source
+#      type(s) require — no predefined-role guesswork, no unused permissions.
+#   2. A service account (created once, reused on re-runs).
+#   3. A binding of that role to that service account, at the ORG level if --org-id is
+#      given, or looped across every project in --project-ids otherwise.
+#   4. (Google Cloud Storage only) The shared bucket-notification Pub/Sub topic, plus a
+#      grant of roles/pubsub.publisher on it to the project's GCS service agent — the
+#      same one-time IAM setup that Lightbeam's producer otherwise has to self-heal at
+#      runtime (grant_gcs_publisher_permission in aws-s3-extract/app/utils.py), done here
+#      up front so live sync works on the very first run.
+#   5. A JSON key for the service account, base64-encoded to the format Lightbeam's
+#      cloud_platform configuration.serviceAccountKey field expects.
+#
+# Supported data source types / capabilities (selectable interactively, multiple at once):
+#   - Google Cloud Storage (permissions verified against the aws-s3-extract GCS
+#     producer/consumer code path: topic + notification + subscription management)
+#   - BigQuery (permissions per
+#     https://docs.lightbeam.ai/lxqobxw6ak7CTnsQjikH/core-features/spectra-ai/data-sources/databases-and-datalakes/bigquery)
+#   - Auto-discovery: read-only permissions for finding scannable GCP resources ahead of
+#     onboarding (Cloud SQL, Compute, Datastore, Spanner, buckets, BigQuery datasets), per
+#     api-gateway/scripts/setup_gcp_discovery_service_account.sh. Combinable with the data
+#     source types above into one service account/role if a single account should cover both.
+#
+# Idempotent: safe to re-run. Existing role/SA are detected and reused (the role's
+# permission list is updated in place, so re-running after adding a data source type
+# picks up the new permissions); IAM bindings are naturally idempotent in gcloud, and the
+# GCS topic/grant step only creates or grants what's missing.
+#
+# Requires: gcloud CLI, already authenticated (gcloud auth login) as a principal with
+# enough IAM admin rights to create org/project custom roles and service account keys.
+# Designed to run as-is in Cloud Shell (gcloud is preinstalled there).
+#
+# Output: a JSON key file (path you choose, default ./service-account-key.json) and a
+# base64-encoded copy next to it (<path>.b64, ready to paste into Lightbeam's
+# serviceAccountKey field / Vault). Both are chmod 600. Treat both as secrets — delete
+# the local copies once they're safely stored in Vault.
+#
+# Every answer below can also be supplied as a flag (see --help), so the whole run can be
+# scripted/embedded. Run with no flags at all and it behaves exactly as before: fully
+# interactive. Anything not given as a flag falls back to a prompt, as long as a terminal
+# is attached; running fully-flagged (plus --yes) needs no terminal at all.
+
+set -Eeuo pipefail
+
+# ---------------------------------------------------------------------------
+# Color helpers — only emit ANSI escapes to a real terminal, and respect
+# NO_COLOR (https://no-color.org/) plus a piped/redirected stdout.
+# ---------------------------------------------------------------------------
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  C_RESET=$'\033[0m'   C_BOLD=$'\033[1m'   C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'    C_GREEN=$'\033[32m' C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'   C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN=''
+fi
+
+rule()    { printf '%s%s%s\n' "$C_DIM" "================================================================================" "$C_RESET"; }
+banner()  { printf '%s%s%s%s\n' "$C_BOLD" "$C_CYAN" "$*" "$C_RESET"; }
+step()    { printf '%s%s%s\n' "$C_CYAN" "$*" "$C_RESET"; }
+info()    { printf '%s%s%s\n' "$C_BLUE" "$*" "$C_RESET"; }
+success() { printf '%s%s%s\n' "$C_GREEN" "$*" "$C_RESET"; }
+warn()    { printf '%s%s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
+err()     { printf '%sERROR:%s %s\n' "$C_RED$C_BOLD" "$C_RESET$C_RED" "$*$C_RESET" >&2; }
+field()   { printf '  %s%-24s%s%s\n' "$C_BOLD" "$1:" "$C_RESET" "$2"; }
+
+# ---------------------------------------------------------------------------
+# Runs a gcloud command, capturing its combined output so a failure's actual
+# error text is guaranteed to print right next to the script's own guidance
+# (added by the ERR trap below) instead of scrolling past. Returns gcloud's
+# real exit code rather than exiting itself, so callers like retry() below
+# still get to decide whether to retry or let it propagate.
+# ---------------------------------------------------------------------------
+gcloud_run() {
+  local output ret=0
+  output=$(gcloud "$@" 2>&1) || ret=$?
+  if [[ $ret -ne 0 ]]; then
+    err "gcloud $* failed (exit ${ret}):"
+  fi
+  [[ -n "$output" ]] && printf '%s\n' "$output"
+  return "$ret"
+}
+
+# Fires once, on whatever command ultimately fails and is left untested (i.e.
+# set -e would abort here) — including a retry() call after it has exhausted
+# every attempt. Pairs the raw failure (already printed above by gcloud_run /
+# retry's own error line) with the same actionable guidance Wiz's onboarding
+# script gives, instead of just dying silently.
+on_command_failure() {
+  local exit_code=$?
+  rule >&2
+  err "Exiting (exit ${exit_code}) — see the error above."
+  err "If this looks like a permission error, confirm the identity below has enough IAM admin rights"
+  err "(custom-role admin at the org/project, service account admin, and IAM security admin) — see the"
+  err "pre-flight permission check above for what's missing. Otherwise, contact Lightbeam support."
+  exit "$exit_code"
+}
+trap on_command_failure ERR
+
+# ---------------------------------------------------------------------------
+# Permission sets per supported data source type
+# ---------------------------------------------------------------------------
+GCS_PERMISSIONS=(
+  pubsub.subscriptions.consume
+  pubsub.subscriptions.create
+  pubsub.subscriptions.get
+  pubsub.topics.attachSubscription
+  pubsub.topics.create
+  pubsub.topics.get
+  pubsub.topics.getIamPolicy
+  pubsub.topics.setIamPolicy
+  storage.buckets.get
+  storage.buckets.list
+  storage.buckets.update
+  storage.objects.get
+  storage.objects.list
+)
+
+BIGQUERY_PERMISSIONS=(
+  bigquery.bireservations.get
+  bigquery.capacityCommitments.get
+  bigquery.capacityCommitments.list
+  bigquery.connections.get
+  bigquery.connections.getIamPolicy
+  bigquery.connections.list
+  bigquery.connections.use
+  bigquery.datasets.get
+  bigquery.datasets.getIamPolicy
+  bigquery.jobs.create
+  bigquery.jobs.get
+  bigquery.jobs.list
+  bigquery.jobs.listAll
+  bigquery.jobs.listExecutionMetadata
+  bigquery.models.export
+  bigquery.models.getData
+  bigquery.models.getMetadata
+  bigquery.models.list
+  bigquery.readsessions.create
+  bigquery.readsessions.getData
+  bigquery.readsessions.update
+  bigquery.reservationAssignments.list
+  bigquery.reservationAssignments.search
+  bigquery.reservations.get
+  bigquery.reservations.list
+  bigquery.routines.get
+  bigquery.routines.list
+  bigquery.rowAccessPolicies.getFilteredData
+  bigquery.tables.createSnapshot
+  bigquery.tables.export
+  bigquery.tables.get
+  bigquery.tables.getData
+  bigquery.tables.getIamPolicy
+  bigquery.tables.list
+  resourcemanager.projects.get
+)
+
+# Read-only permissions for Lightbeam's GCP resource discovery (finding scannable
+# resources — Cloud SQL, Compute, Datastore, Spanner, buckets, BigQuery datasets — ahead
+# of onboarding any specific data source), matching api-gateway/scripts/setup_gcp_discovery_service_account.sh.
+DISCOVERY_PERMISSIONS=(
+  bigquery.datasets.get
+  cloudsql.instances.get
+  cloudsql.instances.list
+  compute.instances.get
+  compute.instances.list
+  compute.regions.list
+  compute.zones.list
+  datastore.databases.list
+  resourcemanager.projects.get
+  spanner.instances.list
+  storage.buckets.get
+  storage.buckets.list
+)
+
+# ---------------------------------------------------------------------------
+# Command-line flags (all optional) — anything not given here falls back to an
+# interactive prompt below, as long as a terminal is attached.
+# ---------------------------------------------------------------------------
+USAGE="$(cat <<'USAGE_EOF'
+Lightbeam GCP data source service account setup
+
+Usage:
+  lightbeam-gcp.sh [options]
+
+Run with no flags at all for the original fully-interactive experience. Any
+value below can be pre-filled with a flag instead of being prompted for, which
+is what lets this be driven from a generated command (e.g. an embedded form):
+
+  lightbeam-gcp.sh \
+    --data-sources=cloud-storage,bigquery \
+    --sa-project=my-project \
+    --org-id=123456789012 \
+    --yes
+
+Options:
+  --data-sources=<list>      Comma-separated data source types to onboard:
+                              cloud-storage (aka gcs/storage/1), bigquery
+                              (aka bq/2), auto-discovery (aka discovery/3).
+                              Multiple allowed, e.g. cloud-storage,bigquery
+  --sa-project=<id>          GCP project ID to host the service account
+                              [default: gcloud's currently configured project]
+  --sa-name=<name>           Service account name
+                              [default: lightbeam-<data-sources>]
+  --role-id=<id>             Custom IAM role ID
+                              [default: lightbeam<DataSources>]
+  --topic-project=<id>       GCP project hosting the GCS bucket-notification
+                              Pub/Sub topic (only used with cloud-storage)
+                              [default: same as --sa-project]
+  --topic-name=<name>        Pub/Sub topic name for GCS bucket notifications
+                              [default: gc-storage-publisher-topic]
+  --org-id=<id>              Bind the role once at this GCP organization
+                              (mutually exclusive with --project-ids)
+  --project-ids=<list>       Comma-separated project IDs to bind the role to
+                              individually (mutually exclusive with --org-id)
+  --key-output-file=<path>   Path to write the JSON key to
+                              [default: service-account-key.json]
+  --dry-run                  Print the gcloud commands without making any
+                              changes (skips the interactive dry-run prompt)
+  --yes, -y                  Skip the final confirmation prompt
+  -h, --help                 Show this help and exit
+USAGE_EOF
+)"
+
+DS_ARG=""
+SA_PROJECT="${SA_PROJECT:-}"
+SA_NAME=""
+ROLE_ID=""
+TOPIC_PROJECT=""
+TOPIC_NAME=""
+ORG_ID=""
+PROJECT_IDS_ARG=""
+KEY_OUTPUT_FILE=""
+DRY_RUN=false
+ASSUME_YES=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --data-sources=*) DS_ARG="${1#*=}"; shift ;;
+    --data-sources) DS_ARG="${2:-}"; shift 2 ;;
+    --sa-project=*) SA_PROJECT="${1#*=}"; shift ;;
+    --sa-project) SA_PROJECT="${2:-}"; shift 2 ;;
+    --sa-name=*) SA_NAME="${1#*=}"; shift ;;
+    --sa-name) SA_NAME="${2:-}"; shift 2 ;;
+    --role-id=*) ROLE_ID="${1#*=}"; shift ;;
+    --role-id) ROLE_ID="${2:-}"; shift 2 ;;
+    --topic-project=*) TOPIC_PROJECT="${1#*=}"; shift ;;
+    --topic-project) TOPIC_PROJECT="${2:-}"; shift 2 ;;
+    --topic-name=*) TOPIC_NAME="${1#*=}"; shift ;;
+    --topic-name) TOPIC_NAME="${2:-}"; shift 2 ;;
+    --org-id=*) ORG_ID="${1#*=}"; shift ;;
+    --org-id) ORG_ID="${2:-}"; shift 2 ;;
+    --project-ids=*) PROJECT_IDS_ARG="${1#*=}"; shift ;;
+    --project-ids) PROJECT_IDS_ARG="${2:-}"; shift 2 ;;
+    --key-output-file=*) KEY_OUTPUT_FILE="${1#*=}"; shift ;;
+    --key-output-file) KEY_OUTPUT_FILE="${2:-}"; shift 2 ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --yes|-y) ASSUME_YES=true; shift ;;
+    -h|--help) echo "$USAGE"; exit 0 ;;
+    *) err "Unrecognized argument: $1"; echo "$USAGE" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -n "$ORG_ID" && -n "$PROJECT_IDS_ARG" ]]; then
+  err "--org-id and --project-ids are mutually exclusive."
+  exit 1
+fi
+
+HAVE_TTY=false
+{ : < /dev/tty; } 2>/dev/null && HAVE_TTY=true
+
+command -v gcloud >/dev/null 2>&1 || { err "gcloud CLI not found on PATH."; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Interactive prompts (used only for whatever wasn't supplied as a flag)
+# ---------------------------------------------------------------------------
+# prompt VAR "question text" ["default"]
+# Blank default means the field is required and re-prompts until non-empty.
+# Only ever called when HAVE_TTY is true — call sites below guard on that.
+prompt() {
+  local __var_name="$1" __question="$2" __default="${3:-}" __input
+  if ! $HAVE_TTY; then
+    err "Missing a value for '$__question' and no terminal is attached to prompt for it."
+    err "Pass it as a flag instead — see --help."
+    exit 1
+  fi
+  if [[ -n "$__default" ]]; then
+    read -r -p "$__question [$__default]: " __input < /dev/tty
+    __input="${__input:-$__default}"
+  else
+    while [[ -z "${__input:-}" ]]; do
+      read -r -p "$__question: " __input < /dev/tty
+      [[ -z "$__input" ]] && echo "  This field is required."
+    done
+  fi
+  printf -v "$__var_name" '%s' "$__input"
+}
+
+rule
+banner "Lightbeam GCP data source service account setup"
+rule
+echo "This walks through picking which Lightbeam GCP data source type(s) you're"
+echo "onboarding, then creates a custom IAM role, a service account, binds them"
+echo "together (org-wide or per-project), and generates a key for Lightbeam to use."
+echo
+
+# ---------------------------------------------------------------------------
+# Data source selection — builds the deduped union of required permissions
+# ---------------------------------------------------------------------------
+declare -A seen_permission
+PERMISSIONS=()
+SELECTED_LABELS=()
+
+add_permissions() {
+  local perm
+  for perm in "$@"; do
+    if [[ -z "${seen_permission[$perm]:-}" ]]; then
+      seen_permission[$perm]=1
+      PERMISSIONS+=("$perm")
+    fi
+  done
+}
+
+# Accepts one token (number or name) for a single data source selection and
+# applies it, used both by --data-sources parsing and the interactive loop.
+apply_data_source_token() {
+  local selection="$1"
+  case "$selection" in
+    1|gcs|storage|cloud-storage)
+      add_permissions "${GCS_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("cloud-storage")
+      ;;
+    2|bq|bigquery)
+      add_permissions "${BIGQUERY_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("bigquery")
+      ;;
+    3|discovery|auto-discovery)
+      add_permissions "${DISCOVERY_PERMISSIONS[@]}"
+      SELECTED_LABELS+=("auto-discovery")
+      ;;
+    *)
+      warn "  Ignoring unrecognized data source '$selection'."
+      ;;
+  esac
+}
+
+if [[ -n "$DS_ARG" ]]; then
+  IFS=',' read -r -a ds_selections <<< "$DS_ARG"
+  for selection in "${ds_selections[@]}"; do
+    selection="$(echo "$selection" | tr -d '[:space:]')"
+    apply_data_source_token "$selection"
+  done
+  if [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; then
+    err "No valid data source types found in --data-sources='$DS_ARG'. See --help."
+    exit 1
+  fi
+elif $HAVE_TTY; then
+  step "Which Lightbeam data source type(s) / capabilities is this service account for?"
+  echo "  ${C_BOLD}1)${C_RESET} Google Cloud Storage"
+  echo "  ${C_BOLD}2)${C_RESET} BigQuery"
+  echo "  ${C_BOLD}3)${C_RESET} Auto-discovery (read-only GCP resource discovery)"
+  while [[ ${#SELECTED_LABELS[@]} -eq 0 ]]; do
+    read -r -p "Enter comma-separated numbers (e.g. 1,2): " ds_choice < /dev/tty
+    IFS=',' read -r -a ds_selections <<< "$ds_choice"
+    for selection in "${ds_selections[@]}"; do
+      selection="$(echo "$selection" | tr -d '[:space:]')"
+      apply_data_source_token "$selection"
+    done
+    [[ ${#SELECTED_LABELS[@]} -eq 0 ]] && warn "  Select at least one valid option."
+  done
+else
+  err "No data source specified. Use --data-sources (see --help)."
+  exit 1
+fi
+
+LABELS_JOINED=$(IFS=+; echo "${SELECTED_LABELS[*]}")
+ROLE_TITLE="Lightbeam ${LABELS_JOINED}"
+ROLE_DESCRIPTION="Lightbeam data source access for: ${SELECTED_LABELS[*]}."
+
+# GCP service account IDs must be 6-30 chars, lowercase letters/digits/hyphens only, and
+# can't end in a hyphen ('+' from LABELS_JOINED is invalid) — so build the default
+# separately from abbreviated data source codes (e.g. lightbeam-cs-bq-ad), truncated and
+# trimmed of any trailing hyphen left by the cut as a defensive fallback.
+declare -A DS_ABBREV=(
+  [cloud-storage]=cs
+  [bigquery]=bq
+  [auto-discovery]=ad
+)
+SA_LABEL_ABBREVS=()
+for label in "${SELECTED_LABELS[@]}"; do
+  SA_LABEL_ABBREVS+=("${DS_ABBREV[$label]}")
+done
+SA_LABELS_JOINED=$(IFS=-; echo "${SA_LABEL_ABBREVS[*]}")
+DEFAULT_SA_NAME="lightbeam-${SA_LABELS_JOINED}"
+DEFAULT_SA_NAME="${DEFAULT_SA_NAME:0:30}"
+DEFAULT_SA_NAME="${DEFAULT_SA_NAME%-}"
+
+# Builds a camelCase role ID suffix from hyphen/plus-delimited labels (e.g.
+# "cloud-storage+bigquery" -> "CloudStorageBigquery") using only portable
+# bash/tr, since sed's \U case-conversion is a GNU extension that silently no-ops on
+# BSD/macOS sed.
+build_role_id_suffix() {
+  local joined="$1" word first rest result=""
+  local IFS='+-'
+  read -r -a words <<< "$joined"
+  for word in "${words[@]}"; do
+    first="$(printf '%s' "${word:0:1}" | tr '[:lower:]' '[:upper:]')"
+    rest="${word:1}"
+    result+="${first}${rest}"
+  done
+  printf '%s' "$result"
+}
+DEFAULT_ROLE_ID="lightbeam$(build_role_id_suffix "$LABELS_JOINED")"
+
+# Offer the gcloud CLI's currently configured project as the default, if one is set
+# (gcloud prints the literal string "(unset)" instead of failing when it isn't).
+DETECTED_SA_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
+[[ "$DETECTED_SA_PROJECT" == "(unset)" ]] && DETECTED_SA_PROJECT=""
+
+if [[ -z "$SA_PROJECT" ]]; then
+  if $HAVE_TTY; then
+    prompt SA_PROJECT "GCP project ID to host the service account" "$DETECTED_SA_PROJECT"
+  elif [[ -n "$DETECTED_SA_PROJECT" ]]; then
+    SA_PROJECT="$DETECTED_SA_PROJECT"
+    info "Using gcloud's configured project for --sa-project: $SA_PROJECT"
+  else
+    err "--sa-project is required (no terminal attached to prompt, and no gcloud default project set)."
+    exit 1
+  fi
+fi
+
+if [[ -z "$SA_NAME" ]]; then
+  if $HAVE_TTY; then prompt SA_NAME "Service account name" "$DEFAULT_SA_NAME"
+  else SA_NAME="$DEFAULT_SA_NAME"; fi
+fi
+
+if [[ -z "$ROLE_ID" ]]; then
+  if $HAVE_TTY; then prompt ROLE_ID "Custom IAM role ID" "$DEFAULT_ROLE_ID"
+  else ROLE_ID="$DEFAULT_ROLE_ID"; fi
+fi
+
+if [[ " ${SELECTED_LABELS[*]} " == *" cloud-storage "* ]]; then
+  if [[ -z "$TOPIC_PROJECT" ]]; then
+    if $HAVE_TTY; then prompt TOPIC_PROJECT "GCP project ID hosting the GCS bucket-notification Pub/Sub topic" "$SA_PROJECT"
+    else TOPIC_PROJECT="$SA_PROJECT"; fi
+  fi
+  if [[ -z "$TOPIC_NAME" ]]; then
+    if $HAVE_TTY; then prompt TOPIC_NAME "Pub/Sub topic name used for GCS bucket notifications" "gc-storage-publisher-topic"
+    else TOPIC_NAME="gc-storage-publisher-topic"; fi
+  fi
+fi
+
+# Walks the project's resource hierarchy (project -> folder(s) -> organization) to find
+# the organization ID that owns it, so we can offer it as a confirmable default instead
+# of making the user look it up by hand. Prints nothing (and the caller falls back to a
+# required prompt) if there's no access or the project has no organization ancestor.
+detect_org_id() {
+  local project="$1"
+  gcloud projects get-ancestors "$project" --format="value(id,type)" 2>/dev/null \
+    | awk '$2 == "organization" { print $1; exit }'
+}
+
+PROJECT_IDS=()
+if [[ -n "$ORG_ID" ]]; then
+  info "Using organization ID from --org-id: $ORG_ID"
+elif [[ -n "$PROJECT_IDS_ARG" ]]; then
+  IFS=',' read -r -a PROJECT_IDS <<< "$PROJECT_IDS_ARG"
+  info "Using project IDs from --project-ids: ${PROJECT_IDS[*]}"
+elif $HAVE_TTY; then
+  read -r -p "Do you have org-level IAM access to bind the role once at the org? [y/N] " has_org < /dev/tty
+  if [[ "$has_org" =~ ^[Yy]$ ]]; then
+    info "Looking up the organization that owns project ${SA_PROJECT}..."
+    DETECTED_ORG_ID="$(detect_org_id "$SA_PROJECT")"
+    if [[ -n "$DETECTED_ORG_ID" ]]; then
+      prompt ORG_ID "GCP organization ID" "$DETECTED_ORG_ID"
+    else
+      warn "  Couldn't auto-detect one (no access to view ancestors, or no org ancestor) — enter it manually."
+      prompt ORG_ID "GCP organization ID"
+    fi
+  else
+    info "No org-level access — the role will be bound on each project individually instead."
+    while [[ ${#PROJECT_IDS[@]} -eq 0 ]]; do
+      read -r -p "Comma-separated project IDs to bind the role to: " project_ids_input < /dev/tty
+      if [[ -n "$project_ids_input" ]]; then
+        IFS=',' read -r -a PROJECT_IDS <<< "$project_ids_input"
+      else
+        warn "  At least one project ID is required."
+      fi
+    done
+  fi
+else
+  err "Specify either --org-id or --project-ids (no terminal attached to ask). See --help."
+  exit 1
+fi
+
+if [[ -z "$KEY_OUTPUT_FILE" ]]; then
+  if $HAVE_TTY; then prompt KEY_OUTPUT_FILE "Path to write the JSON key to" "service-account-key.json"
+  else KEY_OUTPUT_FILE="service-account-key.json"; fi
+fi
+ENCODED_OUTPUT_FILE="${KEY_OUTPUT_FILE}.b64"
+
+if ! $DRY_RUN && $HAVE_TTY && ! $ASSUME_YES; then
+  read -r -p "Dry run only — print the gcloud commands without making any changes? [y/N] " dry_run_answer < /dev/tty
+  [[ "$dry_run_answer" =~ ^[Yy]$ ]] && DRY_RUN=true
+fi
+
+# Prints the command instead of running it when dry-run was chosen. Only wraps mutating
+# gcloud calls — the read-only "describe" checks below always run for real so the
+# create-vs-update branching reflects actual state.
+run() {
+  if $DRY_RUN; then
+    echo "[DRY RUN] would run: $*"
+  else
+    gcloud_run "${@:2}"   # $1 is always the literal "gcloud" at every call site
+  fi
+}
+
+# Retries a command a few times with backoff. Used around the IAM policy binding below:
+# a freshly-created service account is visible to the IAM API immediately but can take a
+# few seconds to propagate to the Resource Manager API that add-iam-policy-binding hits,
+# so the very next binding call can fail with "Service account ... does not exist" even
+# though the SA was just created successfully.
+retry() {
+  local attempt max_attempts=6 delay=5
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    "$@" && return 0
+    if (( attempt < max_attempts )); then
+      warn "  (attempt ${attempt}/${max_attempts} failed — likely IAM propagation delay, retrying in ${delay}s...)"
+      sleep "$delay"
+    fi
+  done
+  err "All ${max_attempts} attempts failed: $*"
+  return 1
+}
+
+SA_EMAIL="${SA_NAME}@${SA_PROJECT}.iam.gserviceaccount.com"
+ACTIVE_ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
+
+# ---------------------------------------------------------------------------
+# Pre-flight: does the active identity actually have enough IAM admin rights
+# to do the rest of this script? Best-effort — checks for the specific
+# predefined roles below (or roles/owner) via direct IAM policy bindings, at
+# the org (if --org-id) or otherwise --sa-project as a representative scope.
+# A custom/aggregate role granting equivalent permissions won't be detected,
+# so this warns and asks for confirmation rather than hard-blocking.
+# ---------------------------------------------------------------------------
+step "▸ Pre-flight: checking IAM admin permissions"
+if [[ -z "$ACTIVE_ACCOUNT" ]]; then
+  warn "  Couldn't determine the active gcloud identity (gcloud config get-value account) — skipping the permission check."
+else
+  PERM_CHECK_KIND="projects"
+  PERM_CHECK_ID="$SA_PROJECT"
+  if [[ -n "$ORG_ID" ]]; then
+    PERM_CHECK_KIND="organizations"
+    PERM_CHECK_ID="$ORG_ID"
+  fi
+
+  has_role_binding() {
+    local role="$1"
+    gcloud "$PERM_CHECK_KIND" get-iam-policy "$PERM_CHECK_ID" \
+      --flatten="bindings[].members" \
+      --format="value(bindings.role)" \
+      --filter="bindings.members=user:${ACTIVE_ACCOUNT}" 2>/dev/null | grep -qx "$role"
+  }
+
+  MISSING_ROLES=()
+  if has_role_binding "roles/owner"; then
+    info "  ${ACTIVE_ACCOUNT} has roles/owner on ${PERM_CHECK_KIND%s} ${PERM_CHECK_ID} — sufficient."
+  else
+    has_role_binding "roles/iam.organizationRoleAdmin" || has_role_binding "roles/iam.roleAdmin" \
+      || MISSING_ROLES+=("roles/iam.organizationRoleAdmin (org) or roles/iam.roleAdmin (project) — create/update the custom IAM role")
+    has_role_binding "roles/iam.serviceAccountAdmin" \
+      || MISSING_ROLES+=("roles/iam.serviceAccountAdmin — create the service account and its key")
+    has_role_binding "roles/resourcemanager.organizationAdmin" || has_role_binding "roles/iam.securityAdmin" \
+      || MISSING_ROLES+=("roles/resourcemanager.organizationAdmin (org) or roles/iam.securityAdmin (project) — bind the role to the service account")
+  fi
+
+  if [[ ${#MISSING_ROLES[@]} -eq 0 ]]; then
+    success "  PASS — ${ACTIVE_ACCOUNT} appears to have sufficient IAM admin rights on ${PERM_CHECK_KIND%s} ${PERM_CHECK_ID}."
+  else
+    warn "  ${ACTIVE_ACCOUNT} is missing direct bindings for (best-effort check — custom/aggregate roles granting"
+    warn "  equivalent permissions won't be detected here):"
+    for role in "${MISSING_ROLES[@]}"; do warn "    - $role"; done
+    if [[ -z "$ORG_ID" && ${#PROJECT_IDS[@]} -gt 1 ]]; then
+      warn "  (checked only against ${PERM_CHECK_ID} as a representative project — other --project-ids entries aren't individually checked.)"
+    fi
+    if $ASSUME_YES; then
+      warn "  Continuing anyway due to --yes."
+    elif $HAVE_TTY; then
+      read -r -p "  Continue anyway? [y/N] " continue_answer < /dev/tty
+      [[ "$continue_answer" =~ ^[Yy]$ ]] || { err "Aborted — insufficient permissions."; exit 1; }
+    else
+      err "  Refusing to proceed without confirmation: no terminal attached and --yes not given."
+      exit 1
+    fi
+  fi
+fi
+
+rule
+$DRY_RUN && warn "[DRY RUN] Nothing below will actually be created/modified."
+echo "About to set up GCP data source access with the following gcloud identity:"
+info "  $ACTIVE_ACCOUNT"
+printf '%s%s%s\n' "$C_DIM" "--------------------------------------------------------------------------------" "$C_RESET"
+field "Data source type(s)" "${SELECTED_LABELS[*]}"
+field "Custom role" "${ROLE_ID} (scope: $( [[ -n "$ORG_ID" ]] && echo "organization ${ORG_ID}" || echo "projects: ${PROJECT_IDS[*]}" ))"
+field "Service account" "${SA_EMAIL} (hosted in project ${SA_PROJECT})"
+field "Permissions (${#PERMISSIONS[@]})" "${PERMISSIONS[*]}"
+if [[ -n "$TOPIC_NAME" ]]; then
+  field "GCS notification topic" "${TOPIC_NAME} (project ${TOPIC_PROJECT}) — will grant the GCS service agent roles/pubsub.publisher"
+fi
+field "Key output" "${KEY_OUTPUT_FILE} (+ base64 at ${ENCODED_OUTPUT_FILE})"
+rule
+if ! $DRY_RUN; then
+  if $ASSUME_YES; then
+    info "Skipping confirmation (--yes)."
+  elif $HAVE_TTY; then
+    read -r -p "Proceed? [y/N] " confirm < /dev/tty
+    [[ "$confirm" =~ ^[Yy]$ ]] || { warn "Aborted."; exit 0; }
+  else
+    err "Refusing to proceed without confirmation: no terminal attached and --yes not given."
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 1. Custom role — org-level or per-project
+# ---------------------------------------------------------------------------
+step "▸ Step 1/5: Custom IAM role"
+PERMISSIONS_CSV=$(IFS=,; echo "${PERMISSIONS[*]}")
+
+create_or_update_role() {
+  local scope_flag="$1"   # e.g. "--organization=123" or "--project=my-proj"
+  local describe_flag="$2"
+
+  if gcloud iam roles describe "$ROLE_ID" $describe_flag >/dev/null 2>&1; then
+    info "Role ${ROLE_ID} already exists ($scope_flag) — updating its permission list."
+    run gcloud iam roles update "$ROLE_ID" $scope_flag \
+      --title="$ROLE_TITLE" \
+      --description="$ROLE_DESCRIPTION" \
+      --permissions="$PERMISSIONS_CSV" \
+      --stage=GA
+  else
+    info "Creating role ${ROLE_ID} ($scope_flag)."
+    run gcloud iam roles create "$ROLE_ID" $scope_flag \
+      --title="$ROLE_TITLE" \
+      --description="$ROLE_DESCRIPTION" \
+      --permissions="$PERMISSIONS_CSV" \
+      --stage=GA
+  fi
+}
+
+if [[ -n "$ORG_ID" ]]; then
+  create_or_update_role "--organization=${ORG_ID}" "--organization=${ORG_ID}"
+  ROLE_RESOURCE="organizations/${ORG_ID}/roles/${ROLE_ID}"
+else
+  for project_id in "${PROJECT_IDS[@]}"; do
+    create_or_update_role "--project=${project_id}" "--project=${project_id}"
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Service account — create once, reuse thereafter
+# ---------------------------------------------------------------------------
+step "▸ Step 2/5: Service account"
+if gcloud iam service-accounts describe "$SA_EMAIL" --project="$SA_PROJECT" >/dev/null 2>&1; then
+  info "Service account ${SA_EMAIL} already exists — reusing it."
+else
+  info "Creating service account ${SA_EMAIL}."
+  run gcloud iam service-accounts create "$SA_NAME" \
+    --project="$SA_PROJECT" \
+    --display-name="Lightbeam ${LABELS_JOINED}"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Bind the role to the service account
+# ---------------------------------------------------------------------------
+step "▸ Step 3/5: IAM policy binding"
+if [[ -n "$ORG_ID" ]]; then
+  info "Binding ${ROLE_RESOURCE} to ${SA_EMAIL} at organization ${ORG_ID}."
+  retry run gcloud organizations add-iam-policy-binding "$ORG_ID" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="${ROLE_RESOURCE}" \
+    --condition=None
+else
+  for project_id in "${PROJECT_IDS[@]}"; do
+    info "Binding projects/${project_id}/roles/${ROLE_ID} to ${SA_EMAIL} on project ${project_id}."
+    retry run gcloud projects add-iam-policy-binding "$project_id" \
+      --member="serviceAccount:${SA_EMAIL}" \
+      --role="projects/${project_id}/roles/${ROLE_ID}" \
+      --condition=None
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# 4. (Google Cloud Storage only) Ensure the shared bucket-notification topic exists
+#    and grant the project's GCS service agent publish rights on it — mirrors
+#    grant_gcs_publisher_permission's runtime self-heal (aws-s3-extract/app/utils.py),
+#    done here up front so live sync works on the very first run.
+# ---------------------------------------------------------------------------
+# Looks up the GCS service agent email for a project via the same Cloud Storage REST
+# endpoint Lightbeam's own runtime code calls (storage.Client.get_service_account_email
+# in aws-s3-extract/app/utils.py), so the two stay consistent.
+gcs_service_agent_email() {
+  local project="$1"
+  curl -sf -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    "https://storage.googleapis.com/storage/v1/projects/${project}/serviceAccount" \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["email_address"])'
+}
+
+if [[ -n "$TOPIC_NAME" ]]; then
+  step "▸ Step 4/5: GCS bucket-notification topic"
+  info "Ensuring Pub/Sub topic '${TOPIC_NAME}' exists in project ${TOPIC_PROJECT}."
+  if gcloud pubsub topics describe "$TOPIC_NAME" --project="$TOPIC_PROJECT" >/dev/null 2>&1; then
+    info "Topic ${TOPIC_NAME} already exists."
+  else
+    run gcloud pubsub topics create "$TOPIC_NAME" --project="$TOPIC_PROJECT"
+  fi
+
+  info "Looking up the GCS service agent for project ${TOPIC_PROJECT}."
+  GCS_SERVICE_AGENT="$(gcs_service_agent_email "$TOPIC_PROJECT")"
+  info "Granting roles/pubsub.publisher on ${TOPIC_NAME} to ${GCS_SERVICE_AGENT}."
+  # gcloud's own add-iam-policy-binding dedupes existing (role, member) pairs, so this
+  # is safe to re-run without accumulating duplicate bindings.
+  run gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
+    --project="$TOPIC_PROJECT" \
+    --member="serviceAccount:${GCS_SERVICE_AGENT}" \
+    --role="roles/pubsub.publisher"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. Key creation + base64 encoding (matches configuration["serviceAccountKey"] format)
+# ---------------------------------------------------------------------------
+step "▸ Step 5/5: Service account key"
+if $DRY_RUN; then
+  warn "[DRY RUN] would run: gcloud iam service-accounts keys create ${KEY_OUTPUT_FILE} --iam-account=${SA_EMAIL} --project=${SA_PROJECT}"
+  warn "[DRY RUN] would then base64-encode ${KEY_OUTPUT_FILE} into ${ENCODED_OUTPUT_FILE} (chmod 600 both)."
+  rule
+  warn "[DRY RUN] complete — nothing was created or modified. Re-run without --dry-run to apply."
+  rule
+  exit 0
+fi
+
+info "Creating a new JSON key for ${SA_EMAIL}."
+gcloud_run iam service-accounts keys create "$KEY_OUTPUT_FILE" \
+  --iam-account="$SA_EMAIL" \
+  --project="$SA_PROJECT"
+chmod 600 "$KEY_OUTPUT_FILE"
+
+# base64 wraps output differently on GNU vs BSD/macOS; stripping newlines makes it portable.
+base64 < "$KEY_OUTPUT_FILE" | tr -d '\n' > "$ENCODED_OUTPUT_FILE"
+chmod 600 "$ENCODED_OUTPUT_FILE"
+
+rule
+success "✔ Done."
+field "Data source type(s)" "${SELECTED_LABELS[*]}"
+field "Service account" "$SA_EMAIL"
+field "Raw key" "$KEY_OUTPUT_FILE"
+field "Base64 key" "${ENCODED_OUTPUT_FILE}  <- paste this into serviceAccountKey"
+echo ""
+warn "Both files are chmod 600 and contain a live credential. Move the base64 content"
+warn "into Vault (or wherever this platform's configuration is stored) and then delete"
+warn "both local files — don't leave long-lived keys sitting on disk."
+rule
