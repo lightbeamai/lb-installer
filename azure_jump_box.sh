@@ -31,7 +31,6 @@ sudo apt-mark hold systemd-timesyncd
 
 # Install docker.
 sudo apt-get -y remove docker docker-engine docker.io containerd runc
-sudo apt-get update -y
 sudo apt-get install -y \
     apt-transport-https \
     ca-certificates \
@@ -57,7 +56,6 @@ else
 fi
 
 # Setup terraform CLI.
-sudo apt-get update && sudo apt-get install -y gnupg software-properties-common curl
 wget https://releases.hashicorp.com/terraform/1.7.4/terraform_1.7.4_linux_386.zip
 unzip terraform_1.7.4_linux_386.zip
 sudo mv terraform /usr/local/bin
