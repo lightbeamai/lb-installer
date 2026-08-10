@@ -1,68 +1,55 @@
 #!/usr/bin/env bash
 
+# Initial apt update and install ALL packages at once
 sudo apt-get update
-sudo apt-get install -y unzip jq
+sudo apt-get install -y \
+    unzip jq apt-transport-https ca-certificates \
+    curl gnupg-agent software-properties-common python3-pip
 
+# Setup python3 symlink
+sudo cp /usr/bin/python3 /usr/bin/python
+
+# Install kubectl
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 kubectl version
 
-wget https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
-tar -xvf helm-v3.13.1-linux-amd64.tar.gz
+# Install helm
+wget -q https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
+tar -xf helm-v3.13.1-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/
+rm -rf linux-amd64 helm-v3.13.1-linux-amd64.tar.gz
 
-sudo curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+# Install Azure CLI
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-# Mark packages on hold to avoid auto upgrade.
-sudo apt-mark hold kubelet
-sudo apt-mark hold kubectl
-sudo apt-mark hold kubeadm
-sudo apt-mark hold containerd.io
-sudo apt-mark hold docker-buildx-plugin
-sudo apt-mark hold docker-ce
-sudo apt-mark hold docker-cli
-sudo apt-mark hold docker-ce-rootless-extras
-sudo apt-mark hold docker-compose-plugin
-sudo apt-mark hold snapd
-sudo apt-mark hold systemd
-sudo apt-mark hold systemd-sysv
-sudo apt-mark hold systemd-timesyncd
+# Install terraform CLI
+wget -q https://releases.hashicorp.com/terraform/1.7.4/terraform_1.7.4_linux_386.zip
+unzip -q terraform_1.7.4_linux_386.zip
+sudo mv terraform /usr/local/bin
+rm -f terraform_1.7.4_linux_386.zip
 
-# Install docker.
-sudo apt-get -y remove docker docker-engine docker.io containerd runc
-sudo apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg-agent \
-    software-properties-common
+# Install Docker
+sudo apt-get -y remove docker docker-engine docker.io containerd runc 2>/dev/null || true
 
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-sudo add-apt-repository -y\
-   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-   $(lsb_release -cs) \
-   stable"
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt-get update -y
-sudo apt-get install docker-ce docker-ce-cli containerd.io -y
-docker_status=`systemctl status docker | grep "running" | wc -l`
-echo "$docker_status"
-if [ $docker_status == 1 ]; then
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+if systemctl is-active --quiet docker; then
    echo "Docker installed and running .."
 else
    echo "Docker installed but not running.."
 fi
 
-# Setup terraform CLI.
-wget https://releases.hashicorp.com/terraform/1.7.4/terraform_1.7.4_linux_386.zip
-unzip terraform_1.7.4_linux_386.zip
-sudo mv terraform /usr/local/bin
-
-# Setup python3.
-sudo cp /usr/bin/python3 /usr/bin/python
-sudo apt install -y python3-pip
+# Mark packages on hold to avoid auto upgrade (after all packages installed)
+sudo apt-mark hold kubelet kubectl kubeadm containerd.io \
+    docker-buildx-plugin docker-ce docker-ce-cli docker-ce-rootless-extras \
+    docker-compose-plugin snapd systemd systemd-sysv systemd-timesyncd 2>/dev/null || true
 
 # Set the context
 kubectl config set-context --current --namespace lightbeam
