@@ -31,8 +31,20 @@ unzip -q terraform_1.7.4_linux_386.zip
 sudo mv terraform /usr/local/bin
 rm -f terraform_1.7.4_linux_386.zip
 
-# Install Docker
-sudo apt-get -y remove docker docker-engine docker.io containerd runc || true
+# Install Docker - remove conflicting packages (only if installed)
+docker_conflicts=()
+for package in docker docker-engine docker.io containerd runc; do
+    if dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii'; then
+        docker_conflicts+=("$package")
+    fi
+done
+
+if ((${#docker_conflicts[@]})); then
+    sudo apt-get remove -y "${docker_conflicts[@]}" || {
+        echo "Failed to remove conflicting Docker packages." >&2
+        exit 1
+    }
+fi
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg
 
