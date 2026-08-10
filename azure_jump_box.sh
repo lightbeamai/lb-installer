@@ -16,10 +16,11 @@ sudo mv kubectl /usr/local/bin/
 kubectl version
 
 # Install helm
-wget -q https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz
-tar -xf helm-v3.13.1-linux-amd64.tar.gz
-sudo mv linux-amd64/helm /usr/local/bin/
-rm -rf linux-amd64 helm-v3.13.1-linux-amd64.tar.gz
+HELM_TMP=$(mktemp -d)
+wget -q https://get.helm.sh/helm-v3.13.1-linux-amd64.tar.gz -O "$HELM_TMP/helm.tar.gz"
+tar -xf "$HELM_TMP/helm.tar.gz" -C "$HELM_TMP"
+sudo mv "$HELM_TMP/linux-amd64/helm" /usr/local/bin/
+rm -rf "$HELM_TMP"
 
 # Install Azure CLI
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
@@ -31,7 +32,7 @@ sudo mv terraform /usr/local/bin
 rm -f terraform_1.7.4_linux_386.zip
 
 # Install Docker
-sudo apt-get -y remove docker docker-engine docker.io containerd runc 2>/dev/null || true
+sudo apt-get -y remove docker docker-engine docker.io containerd runc || true
 
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg
 
