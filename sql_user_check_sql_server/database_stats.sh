@@ -152,6 +152,11 @@ Common causes:
   - Host or port not reachable
 
 HINT
+    # The output file is only written once the queries run, so anything already
+    # at that path is left over from an earlier run and must not be sent on.
+    if [ -e "$outputfile" ]; then
+        printf 'No results were collected. %s is from an earlier run.\n\n' "$outputfile"
+    fi
     exit 1
 fi
 
