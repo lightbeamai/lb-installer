@@ -23,6 +23,13 @@ Specify the following options to run the script
             type the password exactly as it is. To run non-interactively, export `SQLCMDPASSWORD` beforehand
             (use single quotes: `export SQLCMDPASSWORD='Pa55\word'`) and the prompt will be skipped.
 
+Run `./database_stats.sh --help` for the full list of options.
+
+The script prints the connection settings it is about to use, tests the
+connection before running any queries, and reports where the output was
+written. If the connection or any query fails, the error is shown on screen
+rather than only being written to the output file.
+
 stats Mode:
 ```shell
 ./database_stats.sh -h <HOSTNAME> -u <USERNAME> -d <DATABASE_NAME> -o <OUTPUT_FILE_PATH>
