@@ -18,10 +18,12 @@ Specify the following options to run the script
 * PORT: Optional port number, provided as `-p <port number>`. Alternatively include it in HOSTNAME as `<host>,<port>`.
 * Trust server certificate: To trust the server certificate using sqlcmd provide `-t 1` as an argument to the script.
 * Using Entra ID authentication: To use Azure AD or Entra ID authentication provide `-a 1`
-* Password: The script will prompt for password. The input is hidden and is passed to sqlcmd verbatim, so
-            passwords containing backslashes, spaces, quotes or other special characters need no escaping —
-            type the password exactly as it is. To run non-interactively, export `SQLCMDPASSWORD` beforehand
-            (use single quotes: `export SQLCMDPASSWORD='Pa55\word'`) and the prompt will be skipped.
+* Password: The script will prompt for password. The password is passed to sqlcmd verbatim, so passwords
+            containing backslashes, spaces, quotes or other special characters need no escaping — type the
+            password exactly as it is. The input is echoed so that the characters entered can be confirmed,
+            which also means it stays in the terminal scrollback: remove it before sharing a session
+            transcript. To run non-interactively, export `SQLCMDPASSWORD` beforehand (use single quotes:
+            `export SQLCMDPASSWORD='Pa55\word'`) and the prompt will be skipped.
 
 Run `./database_stats.sh --help` for the full list of options.
 

@@ -122,16 +122,19 @@ printf '  Mode       %s\n' "$mode"
 printf '  Output     %s\n' "$outputfile"
 printf '\n'
 
-# Read the password without letting the shell mangle it.
-#   -r : do not treat backslashes as escape characters (a password such as
-#        'Pa55\word' would otherwise lose its backslash)
-#   -s : do not echo the password to the terminal
-# The password is handed to sqlcmd through the SQLCMDPASSWORD environment
-# variable rather than the -P flag, so it never passes through argv and no
-# shell quoting/escaping is applied to it.
+# Read the password without letting the shell mangle it. The -r stops bash from
+# treating backslashes as escape characters, which is what silently turned a password
+# such as 'Pa55\word' into 'Pa55word' before it ever reached sqlcmd.
+#
+# The input is deliberately echoed, so that the exact characters entered can be
+# confirmed when a login is being diagnosed. It therefore stays in the terminal
+# scrollback: do not paste a session transcript into a ticket without removing it.
+#
+# The password is handed to sqlcmd through the SQLCMDPASSWORD environment variable
+# rather than the -P flag, so it never passes through argv and no shell
+# quoting/escaping is applied to it.
 if [ -z "${SQLCMDPASSWORD:-}" ]; then
-    read -r -s -p "Password: " SQLCMDPASSWORD || true
-    echo
+    read -r -p "Password: " SQLCMDPASSWORD || true
 fi
 export SQLCMDPASSWORD
 
