@@ -15,9 +15,22 @@ Specify the following options to run the script
 * USERNAME: Username to use for connecting to the instance.
 * DATABASE_NAME: Name of the database to connect to the instance.
 * OUTPUT_FILE_PATH: Path to an output file to store the output of the script to fetch metadata and stats.
-* Trust server certificate: To trust the server certificate using sqlcmd provide `-c 1` as an argument to the script.
+* PORT: Optional port number, provided as `-p <port number>`. Alternatively include it in HOSTNAME as `<host>,<port>`.
+* Trust server certificate: To trust the server certificate using sqlcmd provide `-t 1` as an argument to the script.
 * Using Entra ID authentication: To use Azure AD or Entra ID authentication provide `-a 1`
-* Password: The script will prompt for password
+* Password: The script will prompt for password. The password is passed to sqlcmd verbatim, so passwords
+            containing backslashes, spaces, quotes or other special characters need no escaping — type the
+            password exactly as it is. The input is echoed so that the characters entered can be confirmed,
+            which also means it stays in the terminal scrollback: remove it before sharing a session
+            transcript. To run non-interactively, export `SQLCMDPASSWORD` beforehand (use single quotes:
+            `export SQLCMDPASSWORD='Pa55\word'`) and the prompt will be skipped.
+
+Run `./database_stats.sh --help` for the full list of options.
+
+The script prints the connection settings it is about to use, tests the
+connection before running any queries, and reports where the output was
+written. If the connection or any query fails, the error is shown on screen
+rather than only being written to the output file.
 
 stats Mode:
 ```shell
