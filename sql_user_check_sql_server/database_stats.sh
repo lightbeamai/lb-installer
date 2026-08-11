@@ -3,6 +3,7 @@
 mode="stats"
 use_ad_auth=0
 trust_server_cert=0
+port=""
 
 set -e
 
@@ -14,6 +15,7 @@ do
         d) database=${OPTARG};;
         o) outputfile=${OPTARG};;
         m) mode=${OPTARG};;
+        p) port=${OPTARG};;
         a) use_ad_auth=${OPTARG};;
         t) trust_server_cert=${OPTARG};;
     esac
@@ -33,30 +35,44 @@ if [ -z "$dbhost" ] || [ -z "$username" ] || [ -z "$database" ] || [ -z "$output
         exit 1
 fi
 
-auth_flag=""
-password=""
-if [ "$use_ad_auth" -eq 1 ]; then
-    auth_flag="-G"  # Use AD authentication
-    read -p "Password: " password
-    password="-P $password"
+# Append the port to the server address if one was supplied.
+server="$dbhost"
+if [ -n "$port" ]; then
+    server="$dbhost,$port"
 fi
 
-trust_cert_flag=""
+# Read the password without letting the shell mangle it.
+#   -r : do not treat backslashes as escape characters (a password such as
+#        'Pa55\word' would otherwise lose its backslash)
+#   -s : do not echo the password to the terminal
+# The password is handed to sqlcmd through the SQLCMDPASSWORD environment
+# variable rather than the -P flag, so it never passes through argv and no
+# shell quoting/escaping is applied to it.
+if [ -z "${SQLCMDPASSWORD:-}" ]; then
+    read -r -s -p "Password: " SQLCMDPASSWORD || true
+    echo
+fi
+export SQLCMDPASSWORD
+
+auth_flag=()
+if [ "$use_ad_auth" -eq 1 ]; then
+    auth_flag=("-G")  # Use AD authentication
+fi
+
+trust_cert_flag=()
 if [ "$trust_server_cert" -eq 1 ]; then
-    trust_cert_flag="-C"  # Trust server certificate
+    trust_cert_flag=("-C")  # Trust server certificate
 fi
 
 
 if [ "$mode" == "stats" ]; then
-  sqlcmd -S $dbhost -U $username $password -i ./database_list_with_size.sql -i ./data_type_distribution.sql -i ./other_stats.sql\
-  -d $database -o $outputfile $auth_flag $trust_cert_flag
+  sqlcmd -S "$server" -U "$username" -i ./database_list_with_size.sql -i ./data_type_distribution.sql -i ./other_stats.sql \
+  -d "$database" -o "$outputfile" "${auth_flag[@]}" "${trust_cert_flag[@]}"
 
 elif [ "$mode" == "full_metadata" ]; then
-  sqlcmd -S $dbhost -U $username $password -i ./queries.sql -d $database -o $outputfile $auth_flag $trust_cert_flag
+  sqlcmd -S "$server" -U "$username" -i ./queries.sql -d "$database" -o "$outputfile" "${auth_flag[@]}" "${trust_cert_flag[@]}"
 
 else
   echo "Mode should be either stats or full_metadata, found: $mode"
   exit 1
 fi
-
-
