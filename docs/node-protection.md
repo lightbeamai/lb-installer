@@ -34,20 +34,20 @@ or validate those cgroups.
 
 | Setting | Default |
 | --- | --- |
-| `kubeReserved.cpu` | `300m` |
-| `kubeReserved.memory` | `512Mi` |
+| `kubeReserved.cpu` | `500m` |
+| `kubeReserved.memory` | `1Gi` |
 | `kubeReserved.ephemeral-storage` | `2Gi` |
 | `kubeReserved.pid` | `1000` |
-| `systemReserved.cpu` | `300m` |
-| `systemReserved.memory` | `512Mi` |
+| `systemReserved.cpu` | `500m` |
+| `systemReserved.memory` | `1Gi` |
 | `systemReserved.ephemeral-storage` | `2Gi` |
 | `systemReserved.pid` | `1000` |
-| `evictionHard.memory.available` | `500Mi` |
+| `evictionHard.memory.available` | `2Gi` |
 | `evictionHard.nodefs.available` | `10%` |
 | `evictionHard.nodefs.inodesFree` | `5%` |
 | `evictionHard.imagefs.available` | `15%` |
 | `evictionHard.imagefs.inodesFree` | `5%` |
-| `evictionMinimumReclaim.memory.available` | `256Mi` |
+| `evictionMinimumReclaim.memory.available` | `1Gi` |
 | `evictionMinimumReclaim.nodefs.available` | `1Gi` |
 | `evictionMinimumReclaim.imagefs.available` | `1Gi` |
 | `enforceNodeAllocatable` | `pods` |
@@ -96,9 +96,9 @@ that config through `kubeadm join`.
 Example:
 
 ```bash
-LB_KUBE_RESERVED_MEMORY=512Mi \
-LB_SYSTEM_RESERVED_MEMORY=512Mi \
-LB_EVICTION_MEMORY_AVAILABLE=500Mi \
+LB_KUBE_RESERVED_MEMORY=1Gi \
+LB_SYSTEM_RESERVED_MEMORY=1Gi \
+LB_EVICTION_MEMORY_AVAILABLE=2Gi \
 sudo ./Ubuntu/master.sh
 ```
 
@@ -113,7 +113,7 @@ only if the node did not inherit the cluster config or you need local overrides.
 Run this on any control-plane, worker, or single-node cluster node:
 
 ```bash
-sudo LB_EVICTION_MEMORY_AVAILABLE=500Mi ./scripts/apply-kubelet-node-protection.sh
+sudo ./scripts/apply-kubelet-node-protection.sh
 sudo ./scripts/verify-kubelet-node-protection.sh
 ```
 

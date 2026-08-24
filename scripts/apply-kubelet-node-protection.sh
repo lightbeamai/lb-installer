@@ -127,26 +127,26 @@ before = relevant(config)
 
 config["cgroupDriver"] = "systemd"
 config["kubeReserved"] = {
-    "cpu": env("LB_KUBE_RESERVED_CPU", "300m"),
-    "memory": env("LB_KUBE_RESERVED_MEMORY", "512Mi"),
+    "cpu": env("LB_KUBE_RESERVED_CPU", "500m"),
+    "memory": env("LB_KUBE_RESERVED_MEMORY", "1Gi"),
     "ephemeral-storage": env("LB_KUBE_RESERVED_EPHEMERAL_STORAGE", "2Gi"),
     "pid": env("LB_KUBE_RESERVED_PID", "1000"),
 }
 config["systemReserved"] = {
-    "cpu": env("LB_SYSTEM_RESERVED_CPU", "300m"),
-    "memory": env("LB_SYSTEM_RESERVED_MEMORY", "512Mi"),
+    "cpu": env("LB_SYSTEM_RESERVED_CPU", "500m"),
+    "memory": env("LB_SYSTEM_RESERVED_MEMORY", "1Gi"),
     "ephemeral-storage": env("LB_SYSTEM_RESERVED_EPHEMERAL_STORAGE", "2Gi"),
     "pid": env("LB_SYSTEM_RESERVED_PID", "1000"),
 }
 config["evictionHard"] = {
-    "memory.available": env("LB_EVICTION_MEMORY_AVAILABLE", "500Mi"),
+    "memory.available": env("LB_EVICTION_MEMORY_AVAILABLE", "2Gi"),
     "nodefs.available": env("LB_EVICTION_NODEFS_AVAILABLE", "10%"),
     "nodefs.inodesFree": env("LB_EVICTION_NODEFS_INODES_FREE", "5%"),
     "imagefs.available": env("LB_EVICTION_IMAGEFS_AVAILABLE", "15%"),
     "imagefs.inodesFree": env("LB_EVICTION_IMAGEFS_INODES_FREE", "5%"),
 }
 config["evictionMinimumReclaim"] = {
-    "memory.available": env("LB_EVICTION_RECLAIM_MEMORY_AVAILABLE", "256Mi"),
+    "memory.available": env("LB_EVICTION_RECLAIM_MEMORY_AVAILABLE", "1Gi"),
     "nodefs.available": env("LB_EVICTION_RECLAIM_NODEFS_AVAILABLE", "1Gi"),
     "imagefs.available": env("LB_EVICTION_RECLAIM_IMAGEFS_AVAILABLE", "1Gi"),
 }
