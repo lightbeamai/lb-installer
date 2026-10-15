@@ -54,6 +54,14 @@ LOG_FILE="$INSTALL_DIR/teleport.log"
 SERVICE_NAME="teleport"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 LOG_OFFSET=0
+UNIT_CHANGED=false
+
+# The Teleport SSH service must run as root: to open a session it switches to
+# the requested login (root, ubuntu, ...), which only root may do. Run as any
+# other user it fails with "fork/exec /bin/bash: operation not permitted" for
+# every login except its own. RUN_AS_USER above still owns the install dir.
+SERVICE_USER="root"
+SERVICE_GROUP="root"
 
 USE_SYSTEMD=true
 if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
@@ -90,8 +98,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${RUN_AS_USER}
-Group=${RUN_AS_GROUP}
+User=${SERVICE_USER}
+Group=${SERVICE_GROUP}
 ExecStart=${BIN_DIR}/teleport start --config=${CONFIG_FILE}
 Restart=on-failure
 RestartSec=5
@@ -113,6 +121,7 @@ UNIT
   RUN_PRIV cp "$tmp_unit" "$SERVICE_FILE"
   rm -f "$tmp_unit"
   SYSTEMCTL daemon-reload
+  UNIT_CHANGED=true
 }
 
 SERVICE_IS_ACTIVE() {
@@ -232,8 +241,9 @@ START_SERVICE() {
     SYSTEMCTL restart "$SERVICE_NAME"
   else
     mkdir -p "$(dirname "$LOG_FILE")"
-    info "Starting Teleport as a background process (no systemd)..."
-    nohup "${BIN_DIR}/teleport" start --config="${CONFIG_FILE}" >> "$LOG_FILE" 2>&1 &
+    info "Starting Teleport as a background process as root (no systemd)..."
+    # Run as root for the same reason as the systemd unit (SERVICE_USER).
+    RUN_PRIV nohup "${BIN_DIR}/teleport" start --config="${CONFIG_FILE}" >> "$LOG_FILE" 2>&1 &
     disown
     info "Started with PID $!. NOTE: this will NOT survive a reboot -- install systemd to fix that."
   fi
@@ -361,15 +371,20 @@ fi
 # Otherwise (e.g. Teleport running via nohup rather than systemd, or stopped)
 # fall through to START_SERVICE, which takes it over, and verify it connects.
 if [ "$VERSION_ALREADY_CORRECT" = true ]; then
-  if [ "$USE_SYSTEMD" = true ] && SERVICE_IS_ACTIVE; then
+  if [ "$USE_SYSTEMD" = true ] && SERVICE_IS_ACTIVE && [ "$UNIT_CHANGED" = true ]; then
+    # e.g. an existing install whose unit still ran Teleport as a regular user:
+    # the new unit only takes effect after a restart.
+    warn "systemd unit changed -- restarting Teleport to apply it."
+  elif [ "$USE_SYSTEMD" = true ] && SERVICE_IS_ACTIVE; then
     info "Teleport service already running on target version. Nothing to do."
     SYSTEMCTL enable "$SERVICE_NAME" >/dev/null
     exit 0
   elif [ "$USE_SYSTEMD" = false ] && pgrep -f "${BIN_DIR}/teleport" >/dev/null 2>&1; then
     info "Teleport already running on target version. Nothing to do."
     exit 0
+  else
+    warn "Teleport service not currently running -- starting it."
   fi
-  warn "Teleport service not currently running -- starting it."
 fi
 
 # ── Upgrade path: stop, back up, swap binary ─────────────────────────────────
